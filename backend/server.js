@@ -78,7 +78,6 @@ console.log("OPENAI_API_KEY loaded:", process.env.OPENAI_API_KEY ? " yes" : " no
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const app = express();
-app.use(express.static(path.join(__dirname, '../dist')));
 
 const limiter = rateLimit({
   windowMs: 60 * 1000,
@@ -957,6 +956,19 @@ app.get('/api/health', async (req, res) => {
   }
 });
 const port = process.env.PORT || 3000;
+
+
+// === ADD STATIC SERVING CODE HERE (BEFORE app.listen) ===
+app.use(express.static(path.join(__dirname, '../dist')));
+
+// SPA fallback - all routes to index.html
+app.get('*', (req, res) => {
+  res.sendFile(path.join(__dirname, '../dist/index.html'));
+});
+
+app.listen(port, '0.0.0.0', () => {
+    console.log(`🚀 Server running on port ${port}`);
+});
 app.listen(port, '0.0.0.0', () => {
     console.log(`🚀 Server running on port ${port}`);
     console.log(`🌐 Environment: ${process.env.NODE_ENV || 'development'}`);
@@ -3077,7 +3089,5 @@ app.get('/api/users/auth0/:auth0Id', authenticateJWT, async (req, res) => {
     console.error("Error fetching user by Auth0 ID:", error);
     res.status(500).json({ error: "Failed to fetch user" });
   }
-});
-app.get('*', (req, res) => {
-  res.sendFile(path.join(__dirname, '../dist/index.html'));
+  
 });
