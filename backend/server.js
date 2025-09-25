@@ -78,6 +78,7 @@ console.log("OPENAI_API_KEY loaded:", process.env.OPENAI_API_KEY ? " yes" : " no
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const app = express();
+app.use(express.static(path.join(__dirname, '../dist')));
 
 const limiter = rateLimit({
   windowMs: 60 * 1000,
@@ -185,22 +186,16 @@ const authenticateJWTWithQuery = async (req, res, next) => {
 };
 
 const dbConfig = {
-  user: 'sa',
-  password: 'Zarish2534#',
-  server: 'localhost',
-  database: 'PurrscribeAI',
+  server: 'purrscribe-db-migration.database.windows.net',
+  database: 'purrscribe-db-migration',
+  user: 'sqladmin',
+  password: 'Aleem2534', 
   options: {
-    encrypt: false,
-    trustServerCertificate: true,
+    encrypt: true,
+    trustServerCertificate: false,
     enableArithAbort: true
-  },
-  pool: {
-    max: 10,
-    min: 0,
-    idleTimeoutMillis: 30000
   }
 };
-
 let pool;
 async function getPool() {
   if (pool) return pool;
@@ -3082,4 +3077,7 @@ app.get('/api/users/auth0/:auth0Id', authenticateJWT, async (req, res) => {
     console.error("Error fetching user by Auth0 ID:", error);
     res.status(500).json({ error: "Failed to fetch user" });
   }
+});
+app.get('*', (req, res) => {
+  res.sendFile(path.join(__dirname, '../dist/index.html'));
 });

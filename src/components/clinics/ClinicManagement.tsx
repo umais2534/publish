@@ -70,6 +70,11 @@ const ClinicManagement: React.FC<ClinicManagementProps> = ({ initialClinics = []
     type: "",
     notes: "",
   });
+   const handleFileUpload = (fileData: {imageData: string, imageType: string}) => {
+    // Handle the file upload logic here
+    console.log('File uploaded:', fileData);
+    // You might want to update state or make an API call
+  };
   const fetchClinics = async () => {
     if (!user) return;
     
@@ -353,6 +358,7 @@ const ClinicManagement: React.FC<ClinicManagementProps> = ({ initialClinics = []
       <ClinicForm 
         clinic={newClinic} 
         onInputChange={handleInputChange} 
+         onFileUpload={handleFileUpload}
         isUploading={isUploading} 
       />
     </div>
@@ -567,6 +573,7 @@ const ClinicManagement: React.FC<ClinicManagementProps> = ({ initialClinics = []
             <ClinicForm
               clinic={newClinic}
               onInputChange={handleInputChange}
+               onFileUpload={handleFileUpload}
               isUploading={isUploading}
             />
           </div>

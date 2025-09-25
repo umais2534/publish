@@ -217,70 +217,79 @@ const handleAddPet = async () => {
     setIsEditPetDialogOpen(true);
   };
 
-  const saveEditedPet = async () => {
-    if (
-      selectedPet &&
-      editFormData.name &&
-      editFormData.species &&
-      editFormData.breed &&
-      editFormData.owner
-    ) {
-      try {
-        setIsSaving(true);
-        const token = getToken();
-        
-        const response = await fetch(`/api/pets/${selectedPet.id}`, {
-          method: "PUT",
-          headers: {
-            "Content-Type": "application/json",
-            "Authorization": `Bearer ${token}`,
-          },
-          body: JSON.stringify({
-            name: editFormData.name,
-            species: editFormData.species,
-            breed: editFormData.breed,
-            age: editFormData.age,
-            owner: editFormData.owner,
-            imageUrl: editFormData.imageUrl,
-            notes: editFormData.notes
-          }),
+const saveEditedPet = async () => {
+  if (
+    selectedPet &&
+    editFormData.name &&
+    editFormData.species &&
+    editFormData.breed &&
+    editFormData.owner
+  ) {
+    try {
+      setIsSaving(true);
+      const token = getToken();
+      
+      // Prepare the data to send
+      const petData: any = {
+        name: editFormData.name,
+        species: editFormData.species,
+        breed: editFormData.breed,
+        age: editFormData.age,
+        owner: editFormData.owner,
+        notes: editFormData.notes
+      };
+
+      // Handle image data - use either URL or base64, not both
+      if (editFormData.imageData && editFormData.imageType) {
+        petData.imageData = editFormData.imageData;
+        petData.imageType = editFormData.imageType;
+      } else if (editFormData.imageUrl) {
+        petData.imageUrl = editFormData.imageUrl;
+      }
+
+      const response = await fetch(`/api/pets/${selectedPet.id}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`,
+        },
+        body: JSON.stringify(petData),
+      });
+      
+      if (response.ok) {
+        const updatedPet = await response.json();
+        const updatedPets = pets.map((pet) => {
+          if (pet.id === selectedPet.id) {
+            return updatedPet.pet;
+          }
+          return pet;
         });
         
-        if (response.ok) {
-          const updatedPet = await response.json();
-          const updatedPets = pets.map((pet) => {
-            if (pet.id === selectedPet.id) {
-              return updatedPet.pet;
-            }
-            return pet;
-          });
-          
-          setPets(updatedPets);
-          setIsEditPetDialogOpen(false);
-          setEditFormData({
-            name: "",
-            species: "",
-            breed: "",
-            age: "",
-            owner: "",
-            imageUrl: "",
-            notes: ""
-          });
-        } else {
-          console.error("Failed to update pet");
-          alert("Failed to update pet. Please try again.");
-        }
-      } catch (error) {
-        console.error("Error updating pet:", error);
-        alert("Error updating pet. Please check your connection.");
-      } finally {
-        setIsSaving(false);
+        setPets(updatedPets);
+        setIsEditPetDialogOpen(false);
+        setEditFormData({
+          name: "",
+          species: "",
+          breed: "",
+          age: "",
+          owner: "",
+          imageUrl: "",
+          notes: ""
+        });
+      } else {
+        console.error("Failed to update pet");
+        alert("Failed to update pet. Please try again.");
       }
-    } else {
-      alert("Please fill all required fields (*)");
+    } catch (error) {
+      console.error("Error updating pet:", error);
+      alert("Error updating pet. Please check your connection.");
+    } finally {
+      setIsSaving(false);
     }
-  };
-
+  } else {
+    alert("Please fill all required fields (*)");
+  }
+};
   const handleNewPetChange = (updatedFields: Partial<PetFormData>) => {
     setNewPet((prev) => ({ 
       ...prev, 

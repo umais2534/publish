@@ -6,8 +6,14 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { ImageUploader } from "@/components/ui/image-uploader";
-import { PetFormData } from "./types/petTypes";
+import { PetFormData as BasePetFormData } from "./types/petTypes";
 import { useState } from "react";
+
+// Extend the PetFormData interface to include imageData and imageType
+interface PetFormData extends BasePetFormData {
+  imageData?: string;
+  imageType?: string;
+}
 
 interface EditPetDialogProps {
   isOpen: boolean;
@@ -15,11 +21,20 @@ interface EditPetDialogProps {
   pet: PetFormData;
   onPetChange: (updatedFields: Partial<PetFormData>) => void;
   onSave: () => void;
-  isSaving?: boolean; // Add loading state
+  isSaving?: boolean;
 }
 
 const EditPetDialog = ({ isOpen, onOpenChange, pet, onPetChange, onSave, isSaving = false }: EditPetDialogProps) => {
   const [isUploading, setIsUploading] = useState(false);
+
+  // Add the onFileUpload handler
+  const handleFileUpload = (fileData: {imageData: string, imageType: string}) => {
+    onPetChange({
+      imageData: fileData.imageData,
+      imageType: fileData.imageType,
+      imageUrl: "" // Clear URL when using file upload
+    });
+  };
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
@@ -107,6 +122,7 @@ const EditPetDialog = ({ isOpen, onOpenChange, pet, onPetChange, onSave, isSavin
             <ImageUploader
               imageUrl={pet.imageUrl || ''}
               onImageChange={(url) => onPetChange({ imageUrl: url })}
+              onFileUpload={handleFileUpload} // ✅ Add this missing prop
               placeholder="Upload a pet image or enter URL"
               disabled={isUploading}
             />

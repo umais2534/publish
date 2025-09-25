@@ -12,6 +12,14 @@ type RequestOptions = {
 type RequestBody = Record<string, any> | FormData;
 
 /**
+ * Extended Error type with additional properties
+ */
+interface ApiError extends Error {
+  status?: number;
+  data?: any;
+}
+
+/**
  * Handles API errors and returns a standardized error object
  */
 const handleApiError = async (response: Response) => {
@@ -21,15 +29,12 @@ const handleApiError = async (response: Response) => {
   try {
     errorData = await response.json();
     errorMessage =
-      errorData?.message || `Error: ${response.status} ${response.statusText}`;
+      (errorData as { message?: string })?.message || `Error: ${response.status} ${response.statusText}`;
   } catch (e) {
     errorMessage = `Error: ${response.status} ${response.statusText}`;
   }
 
-  const error = new Error(errorMessage) as Error & {
-    status?: number;
-    data?: any;
-  };
+  const error = new Error(errorMessage) as ApiError;
   error.status = response.status;
   error.data = errorData;
 
@@ -39,7 +44,7 @@ const handleApiError = async (response: Response) => {
 /**
  * Creates a timeout promise that rejects after specified milliseconds
  */
-const timeoutPromise = (ms: number) => {
+const timeoutPromise = (ms: number): Promise<never> => {
   return new Promise((_, reject) => {
     setTimeout(() => reject(new Error(`Request timed out after ${ms}ms`)), ms);
   });
@@ -52,8 +57,8 @@ const fetchWithTimeout = async (
   url: string,
   options: RequestInit,
   timeout: number,
-) => {
-  return Promise.race([fetch(url, options), timeoutPromise(timeout)]);
+): Promise<Response> => {
+  return Promise.race([fetch(url, options), timeoutPromise(timeout)]) as Promise<Response>;
 };
 
 /**
@@ -90,10 +95,10 @@ const apiRequest = async <T>(
   }
 
   try {
-    const response = await fetchWithTimeout(url, fetchOptions, timeout);
+    const response = (await fetchWithTimeout(url, fetchOptions, timeout)) as Response;
 
     if (!response.ok) {
-      return handleApiError(response);
+      return await handleApiError(response);
     }
 
     // Handle empty responses
@@ -101,7 +106,7 @@ const apiRequest = async <T>(
       return {} as T;
     }
 
-    return await response.json();
+    return await response.json() as T;
   } catch (error) {
     if (error instanceof Error) {
       throw error;

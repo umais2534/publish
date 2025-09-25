@@ -1,5 +1,5 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { VisitTypeTemplate } from "@/types";
+import { VisitTypeTemplate } from "../../types";
 
 interface VisitTypeTemplatesProps {
   templates: VisitTypeTemplate[];
