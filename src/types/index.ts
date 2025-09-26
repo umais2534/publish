@@ -1,5 +1,4 @@
 // components/TranscriptionHistory/types.ts
-
 export interface Transcription {
   id: string;
   title: string;
@@ -15,8 +14,8 @@ export interface Transcription {
   isCallRecording?: boolean;
   transcription?: string;
 }
-// src/types.ts
 
+// src/types.ts
 export interface Pet {
   id: string;
   name: string;
@@ -33,6 +32,7 @@ export interface Clinic {
   city?: string;
   state?: string;
 }
+
 export interface Recording {
   id: string;
   text: string;
@@ -55,11 +55,9 @@ export interface ApiResponse<T> {
 export interface PetFormValues extends Omit<Pet, 'id'> {}
 export interface ClinicFormValues extends Omit<Clinic, 'id'> {}
 
-
 type RecordingFormat = "mp3" | "wav" | "ogg";
 
-
-// types.ts
+// Template types
 export interface TemplateField {
   name: string;
   label: string;
@@ -77,3 +75,5 @@ export interface VisitTypeTemplate {
   updated_at?: string;
 }
 
+// Export all types
+export * from './transcription';

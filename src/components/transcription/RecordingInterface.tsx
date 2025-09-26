@@ -54,140 +54,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-
-// Define TemplateField and VisitTypeTemplate interfaces
-interface TemplateField {
-  name: string;
-  label: string;
-  pattern: RegExp;
-  value: string;
-}
-
-interface VisitTypeTemplate {
-  id: string;
-  name: string;
-  description?: string;
-  template: string;
-  fields: TemplateField[];
-}
-
-// Sample templates with field definitions
-const VisitTypeTemplates: VisitTypeTemplate[] = [
-  {
-    id: "soap",
-    name: "SOAP Notes Template",
-    description: "Subjective, Objective, Assessment, Plan format",
-    template: `SOAP NOTES
-
-PATIENT INFORMATION:
-Name of Pet: {petName}
-Age: {age}
-Species: {species}
-Breed: {breed}
-Owner: {owner}
-Visit Type: {visitType}
-Date: {date}
-
-SUBJECTIVE:
-{subject}
-
-OBJECTIVE:
-{object}
-
-ASSESSMENT:
-{assessment}
-
-PLAN:
-{plan}`,
-    fields: [
-      { name: "petName", label: "Name of Pet", pattern: /./, value: "" },
-      { name: "age", label: "Age", pattern: /./, value: "" },
-      { name: "species", label: "Species", pattern: /./, value: "" },
-      { name: "breed", label: "Breed", pattern: /./, value: "" },
-      { name: "owner", label: "Owner", pattern: /./, value: "" },
-      { name: "visitType", label: "Visit Type", pattern: /./, value: "" },
-      { name: "subject", label: "Subjective", pattern: /./, value: "" },
-      { name: "object", label: "Objective", pattern: /./, value: "" },
-      { name: "assessment", label: "Assessment", pattern: /./, value: "" },
-      { name: "plan", label: "Plan", pattern: /./, value: "" }
-    ]
-  },
-  {
-    id: "medical",
-    name: "Medical Examination Template",
-    description: "Comprehensive medical examination notes",
-    template: `MEDICAL EXAMINATION REPORT
-
-Patient: {petName}
-Age: {age}
-Species: {species}
-Breed: {breed}
-Owner: {owner}
-Date: {date}
-
-VITAL SIGNS:
-Temperature: {temperature}
-Heart Rate: {heartRate}
-Respiratory Rate: {respiratoryRate}
-
-PHYSICAL EXAM:
-Eyes: {eyes}
-Ears: {ears}
-Nose: {nose}
-Mouth: {mouth}
-Skin: {skin}
-Cardiac: {cardiac}
-Respiratory: {respiratory}
-Abdominal: {abdominal}
-Musculoskeletal: {musculoskeletal}
-Neurological: {neurological}
-
-ASSESSMENT:
-{assessment}
-
-TREATMENT PLAN:
-{treatmentPlan}`,
-    fields: [
-      { name: "petName", label: "Patient", pattern: /./, value: "" },
-      { name: "age", label: "Age", pattern: /./, value: "" },
-      { name: "species", label: "Species", pattern: /./, value: "" },
-      { name: "breed", label: "Breed", pattern: /./, value: "" },
-      { name: "owner", label: "Owner", pattern: /./, value: "" },
-      { name: "temperature", label: "Temperature", pattern: /./, value: "" },
-      { name: "heartRate", label: "Heart Rate", pattern: /./, value: "" },
-      { name: "respiratoryRate", label: "Respiratory Rate", pattern: /./, value: "" },
-      { name: "eyes", label: "Eyes", pattern: /./, value: "" },
-      { name: "ears", label: "Ears", pattern: /./, value: "" },
-      { name: "nose", label: "Nose", pattern: /./, value: "" },
-      { name: "mouth", label: "Mouth", pattern: /./, value: "" },
-      { name: "skin", label: "Skin", pattern: /./, value: "" },
-      { name: "cardiac", label: "Cardiac", pattern: /./, value: "" },
-      { name: "respiratory", label: "Respiratory", pattern: /./, value: "" },
-      { name: "abdominal", label: "Abdominal", pattern: /./, value: "" },
-      { name: "musculoskeletal", label: "Musculoskeletal", pattern: /./, value: "" },
-      { name: "neurological", label: "Neurological", pattern: /./, value: "" },
-      { name: "assessment", label: "Assessment", pattern: /./, value: "" },
-      { name: "treatmentPlan", label: "Treatment Plan", pattern: /./, value: "" }
-    ]
-  }
-];
-
-interface Pet {
-  id: string;
-  name: string;
-  species: string;
-  breed: string;
-  age?: string;
-  owner: string;
-}
-
-interface Clinic {
-  id: string;
-  name: string;
-  address?: string;
-  city?: string;
-  state?: string;
-}
+import { VisitTypeTemplate, Pet, Clinic, TemplateField } from '../../types/index';
 
 interface RecordingInterfaceProps {
   onSave?: (transcription: {
@@ -219,7 +86,6 @@ const RecordingInterface: React.FC<RecordingInterfaceProps> = ({
   const [transcriptionText, setTranscriptionText] = useState("");
   const [editableText, setEditableText] = useState("");
   const [templateText, setTemplateText] = useState("");
-  const [speechText, setSpeechText] = useState("");
   const [permissionDenied, setPermissionDenied] = useState(false);
   const [isDiscardDialogOpen, setIsDiscardDialogOpen] = useState(false);
   const [isSaveDialogOpen, setIsSaveDialogOpen] = useState(false);
@@ -242,7 +108,6 @@ const RecordingInterface: React.FC<RecordingInterfaceProps> = ({
   const [isAddClinicDialogOpen, setIsAddClinicDialogOpen] = useState(false);
   const [isTemplateDialogOpen, setIsTemplateDialogOpen] = useState(false);
   const [selectedTemplate, setSelectedTemplate] = useState<VisitTypeTemplate | null>(null);
-  const [templateFields, setTemplateFields] = useState<TemplateField[]>([]);
   const [newPet, setNewPet] = useState<Partial<Pet>>({
     name: "",
     species: "",
@@ -255,16 +120,20 @@ const RecordingInterface: React.FC<RecordingInterfaceProps> = ({
   const [recordingUUID, setRecordingUUID] = useState("");
   const [isEditMode, setIsEditMode] = useState(false);
 
+  // NEW: State for dynamic templates from database
+  const [availableTemplates, setAvailableTemplates] = useState<VisitTypeTemplate[]>([]);
+  const [isLoadingTemplates, setIsLoadingTemplates] = useState(false);
+
+  // NEW: AI Model State for Field Detection
+  const [fieldDetectionHistory, setFieldDetectionHistory] = useState<{field: string, value: string}[]>([]);
+  const [currentFieldContext, setCurrentFieldContext] = useState<{field: string | null, startIndex: number}>({
+    field: null,
+    startIndex: 0
+  });
+
   // Refs
   const timerRef = useRef<number | null>(null);
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const audioChunksRef = useRef<Blob[]>([]);
   const audioStreamRef = useRef<MediaStream | null>(null);
-  const audioContextRef = useRef<AudioContext | null>(null);
-  const analyserRef = useRef<AnalyserNode | null>(null);
-
-  // Waveform data
-  const [waveformData, setWaveformData] = useState<number[]>(Array(50).fill(5));
 
   // Mock data
   const mockPets = [
@@ -286,108 +155,152 @@ const RecordingInterface: React.FC<RecordingInterfaceProps> = ({
 
   const API_URL = "http://localhost:5000/api/transcribe";
 
-  useEffect(() => {
-    const generateUUID = () => {
-      return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, function(c) {
-        const r = (Math.random() * 16) | 0, v = c === "x" ? r : (r & 0x3) | 0x8;
-        return v.toString(16);
-      });
-    };
-    setRecordingUUID(generateUUID());
-  }, []);
+  // NEW: AI Model for Field Detection
+  class FieldDetectionAI {
+    private fieldPatterns: Map<string, string[]>;
+    private contextBuffer: string[];
+    private currentField: string | null;
+    private valueBuffer: string[];
+    
+    constructor() {
+      this.fieldPatterns = new Map();
+      this.contextBuffer = [];
+      this.currentField = null;
+      this.valueBuffer = [];
+      this.initializePatterns();
+    }
 
-  // FIXED: Dynamic field detection that works with any template
-  const parseTemplateFields = (transcript: string, fields: TemplateField[]): TemplateField[] => {
-    // Create a copy of the fields array with current values preserved
-    const updatedFields = fields.map(field => ({...field}));
-    
-    // Create a lowercase transcript for easier matching
-    const lowerTranscript = transcript.toLowerCase();
-    
-    // Process each field in order
-    updatedFields.forEach(field => {
-      // Skip if field already has a value
-      if (field.value) return;
+    private initializePatterns() {
+      // Common field patterns with variations
+      this.fieldPatterns.set('name', ['name', 'patient name', 'pet name', 'animal name', 'name of patient', 'name of pet']);
+      this.fieldPatterns.set('age', ['age', 'years old', 'old', 'age of']);
+      this.fieldPatterns.set('species', ['species', 'type', 'animal type', 'kind', 'species of']);
+      this.fieldPatterns.set('breed', ['breed', 'breed type', 'animal breed', 'type of breed']);
+      this.fieldPatterns.set('weight', ['weight', 'kg', 'pounds', 'lbs', 'weight is']);
+      this.fieldPatterns.set('temperature', ['temperature', 'temp', 'fever', 'degree', 'temperature is']);
+      this.fieldPatterns.set('symptoms', ['symptoms', 'symptom', 'complaints', 'problem', 'issues']);
+      this.fieldPatterns.set('diagnosis', ['diagnosis', 'diagnose', 'condition', 'disease']);
+      this.fieldPatterns.set('treatment', ['treatment', 'medicine', 'medication', 'therapy', 'prescription']);
+      this.fieldPatterns.set('notes', ['notes', 'note', 'comments', 'remarks', 'observation']);
+    }
+
+    // NEW: Advanced field detection with context awareness
+    detectField(text: string): { field: string | null, value: string | null } {
+      const words = text.toLowerCase().split(/\s+/);
+      this.contextBuffer.push(...words);
       
-      // Create a pattern to find this specific field
-      const fieldLabel = field.label.toLowerCase();
-      const fieldIndex = lowerTranscript.indexOf(fieldLabel);
-      
-      if (fieldIndex !== -1) {
-        // Find the text after this field label
-        const textAfterField = transcript.substring(fieldIndex + fieldLabel.length);
-        
-        // Look for the next field label or end of string
-        let nextFieldIndex = Infinity;
-        
-        // Check all other fields to see which comes next
-        updatedFields.forEach(otherField => {
-          if (otherField.name !== field.name && !otherField.value) {
-            const otherFieldLabel = otherField.label.toLowerCase();
-            const otherFieldPos = lowerTranscript.indexOf(otherFieldLabel, fieldIndex);
-            if (otherFieldPos !== -1 && otherFieldPos < nextFieldIndex) {
-              nextFieldIndex = otherFieldPos;
-            }
-          }
-        });
-        
-        // Extract the value between this field and the next one
-        let value = '';
-        if (nextFieldIndex !== Infinity) {
-          // Extract text from after current field to before next field
-          const textBeforeNextField = transcript.substring(
-            fieldIndex + fieldLabel.length, 
-            nextFieldIndex
-          );
-          value = textBeforeNextField.trim();
-        } else {
-          // No next field found, take everything after this field
-          value = textAfterField.trim();
-        }
-        
-        // Clean up the value - remove colons and other punctuation at start
-        value = value.replace(/^[:-\s]+/, '').trim();
-        
-        // Remove any trailing punctuation
-        value = value.replace(/[.,;:!?]$/, '').trim();
-        
-        // For short fields (name, age, etc.), take only the first few words
-        if (field.name === 'petName' || field.name === 'age' || field.name === 'species' || 
-            field.name === 'breed' || field.name === 'owner' || field.name === 'visitType') {
-          const words = value.split(/\s+/);
-          value = words.slice(0, 3).join(' '); // Take max 3 words for short fields
-        }
-        
-        // Update the field value if we found something meaningful
+      // Keep only last 20 words for context
+      if (this.contextBuffer.length > 20) {
+        this.contextBuffer = this.contextBuffer.slice(-20);
+      }
+
+      // Check if we're currently in a field context
+      if (this.currentField) {
+        const value = this.extractFieldValue(text);
         if (value) {
-          const fieldIndex = updatedFields.findIndex(f => f.name === field.name);
-          if (fieldIndex !== -1) {
-            updatedFields[fieldIndex].value = value;
+          return { field: this.currentField, value };
+        }
+      }
+
+      // Detect new field mentions
+      for (const [field, patterns] of this.fieldPatterns) {
+        for (const pattern of patterns) {
+          const regex = new RegExp(`\\b${pattern}\\b`, 'i');
+          if (regex.test(text)) {
+            this.currentField = field;
+            this.valueBuffer = [];
+            console.log(`🎯 AI detected field: ${field}`);
+            return { field, value: null };
           }
         }
       }
-    });
-    
-    return updatedFields;
-  };
 
-  // Add this function to reset all field values
-  const resetFieldValues = () => {
-    if (selectedTemplate) {
-      setTemplateFields(selectedTemplate.fields.map(field => ({...field, value: ""})));
+      return { field: null, value: null };
     }
-  };
 
-  // Helper function to generate filled template
-  const generateFilledTemplate = (template: string, fields: TemplateField[]): string => {
+    private extractFieldValue(text: string): string | null {
+      const fieldKeywords = this.getFieldKeywords(this.currentField!);
+      const words = text.toLowerCase().split(/\s+/);
+      
+      // Remove field mention from text
+      let cleanText = text.toLowerCase();
+      const patterns = this.fieldPatterns.get(this.currentField!) || [];
+      patterns.forEach(pattern => {
+        cleanText = cleanText.replace(new RegExp(`\\b${pattern}\\b`, 'gi'), '');
+      });
+
+      cleanText = cleanText.trim();
+      
+      if (!cleanText) return null;
+
+      // Extract value based on field type
+      let value = this.cleanExtractedValue(cleanText);
+      
+      // Validate value
+      if (value && this.isValidValue(value, this.currentField!)) {
+        this.currentField = null; // Reset field context after value extraction
+        return value;
+      }
+
+      return null;
+    }
+
+    private getFieldKeywords(field: string): string[] {
+      const keywordMap: { [key: string]: string[] } = {
+        'name': ['is', 'called', 'named'],
+        'age': ['is', 'years', 'old'],
+        'species': ['is', 'type'],
+        'breed': ['is', 'breed'],
+        'weight': ['is', 'kg', 'pounds'],
+        'temperature': ['is', 'degrees', 'fahrenheit', 'celsius']
+      };
+      return keywordMap[field] || ['is'];
+    }
+
+    private cleanExtractedValue(value: string): string {
+      return value
+        .replace(/^[:\-\s]+/, '')
+        .replace(/[.,;:!?]\s*$/, '')
+        .trim();
+    }
+
+    private isValidValue(value: string, field: string): boolean {
+      if (!value || value.length < 1 || value.length > 50) return false;
+
+      // Field-specific validation
+      switch (field) {
+        case 'age':
+          return /^(\d+\s*(years?|yrs?)?\s*(old)?)$/i.test(value);
+        case 'weight':
+          return /^(\d+\s*(kg|kilos?|pounds?|lbs?))$/i.test(value);
+        case 'temperature':
+          return /^(\d+\.?\d*\s*(degrees?|°)?\s*(F|C|Fahrenheit|Celsius)?)$/i.test(value);
+        default:
+          return value.split(/\s+/).length <= 5; // Limit to 5 words for other fields
+      }
+    }
+
+    reset() {
+      this.currentField = null;
+      this.contextBuffer = [];
+      this.valueBuffer = [];
+    }
+  }
+
+  // Initialize AI Model
+  const fieldAI = useRef(new FieldDetectionAI());
+
+  // NEW: Template generation without NOTES section
+  const generateFilledTemplate = (template: string, fieldValues: Map<string, string>): string => {
     let filledTemplate = template;
     
-    fields.forEach(field => {
-      const placeholder = `{${field.name}}`;
-      filledTemplate = filledTemplate.replace(placeholder, field.value || "");
+    // Replace field placeholders
+    fieldValues.forEach((value, field) => {
+      const placeholder = `{${field}}`;
+      filledTemplate = filledTemplate.replace(new RegExp(placeholder, 'g'), value);
     });
     
-    // Also replace the predefined variables
+    // Replace predefined variables
     const pet = mockPets.find((p) => p.id === selectedPet);
     const clinic = mockClinics.find((c) => c.id === selectedClinic);
     
@@ -399,111 +312,269 @@ const RecordingInterface: React.FC<RecordingInterfaceProps> = ({
       .replace(/\{DATE\}/g, new Date().toLocaleDateString());
   };
 
-  // Update template text when details change
+  // NEW: Real-time AI Field Detection
+  const processTranscriptWithAI = (currentTranscript: string) => {
+    if (!selectedTemplate || !isRecording) return;
+
+    const detectionResult = fieldAI.current.detectField(currentTranscript);
+    
+    if (detectionResult.field && detectionResult.value) {
+      // Add to detection history
+      setFieldDetectionHistory(prev => [...prev, {
+        field: detectionResult.field!,
+        value: detectionResult.value
+      }]);
+
+      // Update template with detected value
+      updateTemplateWithFieldValue(detectionResult.field, detectionResult.value);
+    }
+  };
+
+  // NEW: Update template with detected field value
+  const updateTemplateWithFieldValue = (field: string, value: string) => {
+    if (!selectedTemplate) return;
+
+    // Create a map of current field values from history
+    const fieldValues = new Map<string, string>();
+    fieldDetectionHistory.forEach(({field: f, value: v}) => {
+      fieldValues.set(f, v);
+    });
+    fieldValues.set(field, value);
+
+    const newTemplateText = generateFilledTemplate(selectedTemplate.template, fieldValues);
+    setTemplateText(newTemplateText);
+    setEditableText(newTemplateText);
+    setTranscriptionText(newTemplateText);
+  };
+
+  // Fetch templates from database
+  const fetchTemplates = async () => {
+    if (!isAuthenticated) return;
+    
+    try {
+      setIsLoadingTemplates(true);
+      const token = getToken();
+      const response = await fetch('http://localhost:5000/api/templates', {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+
+      if (response.ok) {
+        const templatesData = await response.json();
+        const convertedTemplates: VisitTypeTemplate[] = templatesData.map((template: any) => ({
+          id: template.id.toString(),
+          name: template.name,
+          description: template.description,
+          template: template.template,
+          fields: extractFieldsFromTemplate(template.template),
+          created_at: template.created_at,
+          updated_at: template.updated_at
+        }));
+        setAvailableTemplates(convertedTemplates);
+      } else {
+        console.error('Failed to fetch templates');
+        setAvailableTemplates([]);
+      }
+    } catch (error) {
+      console.error('Error fetching templates:', error);
+      setAvailableTemplates([]);
+    } finally {
+      setIsLoadingTemplates(false);
+    }
+  };
+
+  // Helper function to extract fields from template content
+  const extractFieldsFromTemplate = (template: string): TemplateField[] => {
+    const fieldRegex = /{([^}]+)}/g;
+    const matches = template.match(fieldRegex);
+    
+    if (!matches) return [];
+
+    const fields: TemplateField[] = [];
+    matches.forEach(match => {
+      const fieldName = match.replace(/[{}]/g, '');
+      const predefinedFields = ['PET_NAME', 'OWNER_NAME', 'CLINIC_NAME', 'VISIT_TYPE', 'DATE'];
+      if (!predefinedFields.includes(fieldName)) {
+        fields.push({
+          name: fieldName,
+          label: fieldName.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase()),
+          pattern: /./,
+          value: ""
+        });
+      }
+    });
+
+    return fields;
+  };
+
+  useEffect(() => {
+    const generateUUID = () => {
+      return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, function(c) {
+        const r = (Math.random() * 16) | 0, v = c === "x" ? r : (r & 0x3) | 0x8;
+        return v.toString(16);
+      });
+    };
+    setRecordingUUID(generateUUID());
+  }, []);
+
+  // Load templates when component mounts or authentication changes
+  useEffect(() => {
+    if (isAuthenticated) {
+      fetchTemplates();
+    }
+  }, [isAuthenticated]);
+
+  // NEW: AI-powered transcript processing
+  useEffect(() => {
+    if (isRecording && selectedTemplate && transcript) {
+      processTranscriptWithAI(transcript);
+    }
+  }, [transcript, isRecording, selectedTemplate]);
+
+  // Update editable text based on template and transcript
   useEffect(() => {
     if (selectedTemplate) {
-      const newTemplateText = generateFilledTemplate(selectedTemplate.template, templateFields);
-      setTemplateText(newTemplateText);
+      const fieldValues = new Map<string, string>();
+      fieldDetectionHistory.forEach(({field, value}) => {
+        fieldValues.set(field, value);
+      });
       
-      // For live recording, don't show NOTES section
-      if (isRecording) {
-        setEditableText(`${newTemplateText}\n\n--- LIVE DICTATION ---\n${speechText}`);
-      } 
-      // For uploaded audio, show NOTES section
-      else if (transcriptionResult) {
-        setEditableText(`${newTemplateText}\n\n--- NOTES ---\n${transcriptionResult}`);
-      } 
-      // For initial state
-      else {
-        setEditableText(newTemplateText);
-      }
+      const newTemplateText = generateFilledTemplate(selectedTemplate.template, fieldValues);
+      setTemplateText(newTemplateText);
+      setEditableText(newTemplateText);
     } else {
       setTemplateText("");
-      // For live recording, don't show NOTES section
-      if (isRecording) {
-        setEditableText(speechText);
-      } 
-      // For uploaded audio, show NOTES section
-      else if (transcriptionResult) {
-        setEditableText(transcriptionResult);
-      } 
-      // For initial state
-      else {
-        setEditableText("");
-      }
+      setEditableText(transcript || transcriptionResult || "");
     }
-  }, [selectedTemplate, selectedPet, selectedClinic, visitType, templateFields]);
+  }, [selectedTemplate, selectedPet, selectedClinic, visitType, fieldDetectionHistory, transcript, transcriptionResult]);
 
-  // Update speech text during recording
   useEffect(() => {
-    if (isRecording && selectedTemplate) {
-      setSpeechText(transcript);
+    setHasContent(!!transcript || !!editableText || !!transcriptionResult);
+  }, [transcript, editableText, transcriptionResult]);
+
+  const resetFieldValues = () => {
+    setFieldDetectionHistory([]);
+    fieldAI.current.reset();
+    
+    if (selectedTemplate) {
+      const initialTemplate = generateFilledTemplate(selectedTemplate.template, new Map());
+      setTemplateText(initialTemplate);
+      setEditableText(initialTemplate);
+    }
+  };
+
+  const stopRecording = () => {
+    SpeechRecognition.stopListening();
+    setIsRecording(false);
+    setIsPaused(false);
+    
+    if (audioStreamRef.current) {
+      audioStreamRef.current.getTracks().forEach((track) => track.stop());
+    }
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+
+    if (selectedTemplate) {
+      const fieldValues = new Map<string, string>();
+      fieldDetectionHistory.forEach(({field, value}) => {
+        fieldValues.set(field, value);
+      });
       
-      // Parse the transcript for template fields
-      const updatedFields = parseTemplateFields(transcript, selectedTemplate.fields);
-      setTemplateFields(updatedFields);
-      
-      // Generate the filled template
-      const filledTemplate = generateFilledTemplate(selectedTemplate.template, updatedFields);
-      
-      // For live recording, don't show NOTES section
-      setEditableText(`${filledTemplate}\n\n--- LIVE DICTATION ---\n${transcript}`);
-    } else if (isRecording) {
-      setSpeechText(transcript);
-      // For live recording, don't show NOTES section
+      const finalTemplateText = generateFilledTemplate(selectedTemplate.template, fieldValues);
+      setTranscriptionText(finalTemplateText);
+      setTemplateText(finalTemplateText);
+      setEditableText(finalTemplateText);
+    } else {
+      setTranscriptionText(transcript);
       setEditableText(transcript);
     }
     
-    // Update hasContent state
-    setHasContent(!!transcript || !!editableText || !!transcriptionResult);
-  }, [transcript, isRecording, editableText, transcriptionResult]);
+    setTranscriptionResult(transcript);
+    setHasContent(true);
+  };
 
-  useEffect(() => {
-    if (isRecording && !isPaused) {
-      if (!audioContextRef.current) {
-        audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
+  // Audio transcription function
+  const transcribeAudioFile = async () => {
+    if (!audioFile) return;
+    
+    setIsTranscribingUpload(true);
+    setUploadProgress(0);
+    setTranscriptionResult("");
+    
+    try {
+      setUploadProgress(30);
+      const uploadedAudioUrl = await uploadAudioFile(audioFile);
+      
+      if (!uploadedAudioUrl) {
+        throw new Error('Audio file upload failed');
       }
-      if (audioStreamRef.current && audioContextRef.current) {
-        const analyser = audioContextRef.current.createAnalyser();
-        analyser.fftSize = 128;
-        const bufferLength = analyser.frequencyBinCount;
-        const dataArray = new Uint8Array(bufferLength);
+      
+      setUploadProgress(60);
+      const formData = new FormData();
+      formData.append('audio', audioFile);
+
+      const transcriptionText = await new Promise<string>((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.open('POST', API_URL);
+
+        xhr.upload.onprogress = (e) => {
+          if (e.lengthComputable) {
+            setUploadProgress(60 + Math.round((e.loaded / e.total) * 30));
+          }
+        };
+
+        xhr.onload = () => {
+          if (xhr.status === 200) {
+            try {
+              const json = JSON.parse(xhr.responseText);
+              resolve(json.text || '');
+            } catch (err) {
+              reject(new Error('Invalid JSON response from server'));
+            }
+          } else {
+            reject(new Error(`Server error: ${xhr.status} ${xhr.statusText}`));
+          }
+        };
+
+        xhr.onerror = () => reject(new Error('Network error during upload'));
+        xhr.send(formData);
+      });
+
+      let finalText = transcriptionText;
+      
+      if (selectedTemplate) {
+        // Process uploaded audio transcription with AI
+        const lines = transcriptionText.split('\n');
+        const detectedFields = new Map<string, string>();
         
-        const source = audioContextRef.current.createMediaStreamSource(audioStreamRef.current);
-        source.connect(analyser);
-        analyserRef.current = analyser;
-        updateWaveform();
-      }
-    }
-    return () => {
-      if (audioContextRef.current?.state !== "closed") {
-        audioContextRef.current?.close();
-      }
-    };
-  }, [isRecording, isPaused]);
+        lines.forEach(line => {
+          const detectionResult = fieldAI.current.detectField(line);
+          if (detectionResult.field && detectionResult.value) {
+            detectedFields.set(detectionResult.field, detectionResult.value);
+          }
+        });
 
-  const updateWaveform = () => {
-    if (!isRecording || isPaused || !analyserRef.current) return;
-    
-    // Create a new Uint8Array each time instead of using the ref
-    const bufferLength = analyserRef.current.frequencyBinCount;
-    const dataArray = new Uint8Array(bufferLength);
-    
-    // This should work without type errors
-    analyserRef.current.getByteFrequencyData(dataArray);
-    
-    const newWaveformData = Array(50).fill(0);
-    const step = Math.floor(dataArray.length / 50);
-    
-    for (let i = 0; i < 50; i++) {
-      const index = i * step;
-      if (index < dataArray.length) {
-        newWaveformData[i] = (dataArray[index] / 255) * 80;
+        const filledTemplate = generateFilledTemplate(selectedTemplate.template, detectedFields);
+        setTemplateText(filledTemplate);
+        finalText = filledTemplate;
       }
+      
+      setEditableText(finalText);
+      setTranscriptionResult(transcriptionText);
+      setTranscriptionText(finalText);
+      setUploadProgress(100);
+      setHasContent(true);
+      
+      await saveTranscriptionAsCallRecording(finalText, transcriptionText, uploadedAudioUrl);
+      
+    } catch (err: any) {
+      setTranscriptionResult(`❌ Transcription failed: ${err.message}`);
+    } finally {
+      setIsTranscribingUpload(false);
     }
-    
-    setWaveformData(newWaveformData);
-    requestAnimationFrame(updateWaveform);
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -517,6 +588,9 @@ const RecordingInterface: React.FC<RecordingInterfaceProps> = ({
       resetTranscript();
       setTranscriptionResult("");
       setHasContent(true);
+      // Reset AI for new upload
+      setFieldDetectionHistory([]);
+      fieldAI.current.reset();
     }
   };
 
@@ -552,93 +626,10 @@ const RecordingInterface: React.FC<RecordingInterfaceProps> = ({
       }
       
       const result = await response.json();
-      return result.audioFile?.url || null; 
+      return result.audioFile?.url || null;
     } catch (error) {
       console.error('Audio upload error:', error);
       return null;
-    }
-  };
-
-  const transcribeAudioFile = async () => {
-    if (!audioFile) return;
-    
-    setIsTranscribingUpload(true);
-    setUploadProgress(0);
-    setTranscriptionResult("");
-    
-    try {
-      // Step 1: Upload audio file to server
-      setUploadProgress(30);
-      const uploadedAudioUrl = await uploadAudioFile(audioFile);
-      
-      if (!uploadedAudioUrl) {
-        throw new Error('Audio file upload failed');
-      }
-      
-      // Step 2: Transcribe the audio
-      setUploadProgress(60);
-      const formData = new FormData();
-      formData.append('audio', audioFile);
-
-      const transcriptionText = await new Promise<string>((resolve, reject) => {
-        const xhr = new XMLHttpRequest();
-        xhr.open('POST', API_URL);
-
-        xhr.upload.onprogress = (e) => {
-          if (e.lengthComputable) {
-            setUploadProgress(60 + Math.round((e.loaded / e.total) * 30));
-          }
-        };
-
-        xhr.onload = () => {
-          if (xhr.status === 200) {
-            try {
-              const json = JSON.parse(xhr.responseText);
-              resolve(json.text || '');
-            } catch (err) {
-              reject(new Error('Invalid JSON response from server'));
-            }
-          } else {
-            reject(new Error(`Server error: ${xhr.status} ${xhr.statusText}`));
-          }
-        };
-
-        xhr.onerror = () => reject(new Error('Network error during upload'));
-        xhr.send(formData);
-      });
-
-      // Step 3: Parse template fields from the transcription
-      let finalText = transcriptionText;
-      let detectedFields: TemplateField[] = [];
-      
-      if (selectedTemplate) {
-        // Parse fields from the uploaded audio transcription
-        detectedFields = parseTemplateFields(transcriptionText, selectedTemplate.fields);
-        setTemplateFields(detectedFields);
-        
-        // Generate the filled template with detected fields
-        const filledTemplate = generateFilledTemplate(selectedTemplate.template, detectedFields);
-        
-        // For uploaded audio, show NOTES section
-        finalText = `${filledTemplate}\n\n--- NOTES ---\n${transcriptionText}`;
-      } else {
-        // For uploaded audio without template, show NOTES section
-        finalText = `--- NOTES ---\n${transcriptionText}`;
-      }
-      
-      setEditableText(finalText);
-      setTranscriptionResult(transcriptionText);
-      setTranscriptionText(finalText);
-      setUploadProgress(100);
-      setHasContent(true);
-      
-      // Step 4: Automatically save as call recording with audio URL
-      await saveTranscriptionAsCallRecording(finalText, transcriptionText, uploadedAudioUrl);
-      
-    } catch (err: any) {
-      setTranscriptionResult(`❌ Transcription failed: ${err.message}`);
-    } finally {
-      setIsTranscribingUpload(false);
     }
   };
 
@@ -689,8 +680,6 @@ const RecordingInterface: React.FC<RecordingInterfaceProps> = ({
       
       const result = await response.json();
       console.log('Audio transcription saved with audio URL:', result);
-    
-      
     } catch (error: any) {
       console.error('Failed to save transcription with audio:', error);
       alert(`Failed to save transcription: ${error.message}`);
@@ -699,8 +688,8 @@ const RecordingInterface: React.FC<RecordingInterfaceProps> = ({
 
   const handleTemplateSelect = (template: VisitTypeTemplate) => {
     setSelectedTemplate(template);
-    // Reset all field values when selecting a new template
-    setTemplateFields(template.fields.map(field => ({...field, value: ""})));
+    setFieldDetectionHistory([]);
+    fieldAI.current.reset();
     setIsTemplateDialogOpen(false);
     
     if (template.name.toLowerCase().includes("soap")) {
@@ -711,27 +700,19 @@ const RecordingInterface: React.FC<RecordingInterfaceProps> = ({
       setFormat("raw");
     }
     
-    // Generate initial template with pet/clinic info
-    const initialTemplate = generateFilledTemplate(template.template, template.fields);
+    const initialTemplate = generateFilledTemplate(template.template, new Map());
     setTemplateText(initialTemplate);
-    
-    // For uploaded audio, show NOTES section
-    if (transcriptionResult) {
-      setEditableText(`${initialTemplate}\n\n--- NOTES ---\n${transcriptionResult}`);
-    } else {
-      setEditableText(initialTemplate);
-    }
-    
+    setEditableText(initialTemplate);
     setHasContent(true);
   };
 
   const clearTemplate = () => {
     setSelectedTemplate(null);
-    setTemplateFields([]);
     setTemplateText("");
-    setFormat("raw"); 
+    setFormat("raw");
+    setFieldDetectionHistory([]);
+    fieldAI.current.reset();
     
-    // For uploaded audio, show NOTES section
     if (transcriptionResult) {
       setEditableText(transcriptionResult);
     } else {
@@ -756,6 +737,9 @@ const RecordingInterface: React.FC<RecordingInterfaceProps> = ({
       setAudioFile(null);
       setAudioUrl(null);
       setHasContent(true);
+      // Reset AI for new recording
+      setFieldDetectionHistory([]);
+      fieldAI.current.reset();
       timerRef.current = window.setInterval(() => {
         setRecordingTime((prev) => prev + 1);
       }, 1000);
@@ -786,29 +770,6 @@ const RecordingInterface: React.FC<RecordingInterfaceProps> = ({
     }, 1000);
   };
 
-  const stopRecording = () => {
-    SpeechRecognition.stopListening();
-    setIsRecording(false);
-    setIsPaused(false);
-    if (audioStreamRef.current) {
-      audioStreamRef.current.getTracks().forEach((track) => track.stop());
-    }
-    if (timerRef.current) {
-      clearInterval(timerRef.current);
-      timerRef.current = null;
-    }
-
-    // For live recording, don't show NOTES section
-    const finalText = selectedTemplate
-      ? `${templateText}\n\n--- LIVE DICTATION ---\n${transcript}`
-      : transcript;
-
-    setTranscriptionText(finalText);
-    setEditableText(finalText);
-    setTranscriptionResult(transcript);
-    setHasContent(true);
-  };
-
   const formatTime = (seconds: number) => {
     const minutes = Math.floor(seconds / 60);
     const remainingSeconds = seconds % 60;
@@ -821,21 +782,7 @@ const RecordingInterface: React.FC<RecordingInterfaceProps> = ({
     setHasContent(!!e.target.value);
   };
 
-  const debugStateBeforeSave = () => {
-    console.log("=== DEBUG STATE BEFORE SAVE ===");
-    console.log("transcriptionText:", transcriptionText);
-    console.log("editableText:", editableText);
-    console.log("speechText:", speechText);
-    console.log("templateText:", templateText);
-    console.log("isRecording:", isRecording);
-    console.log("isPaused:", isPaused);
-    console.log("transcript (from speech recognition):", transcript);
-    console.log("=================================");
-  };
-
   const saveTranscription = async () => {
-    debugStateBeforeSave();
-    
     if (!isAuthenticated) {
       alert('Please login to save transcriptions');
       return;
@@ -846,6 +793,7 @@ const RecordingInterface: React.FC<RecordingInterfaceProps> = ({
       alert('Authentication token not found. Please login again.');
       return;
     }
+
     const formatToCategoryMap: Record<string, string> = {
       'soap': 'SOAP',
       'medical': 'Medical Notes', 
@@ -857,6 +805,7 @@ const RecordingInterface: React.FC<RecordingInterfaceProps> = ({
       'Call Recording': 'Call Recording',
       'Others': 'Others'
     };
+
     let category = "Raw Text";
     if (selectedTemplate) {
       if (selectedTemplate.name.toLowerCase().includes("soap")) {
@@ -871,6 +820,7 @@ const RecordingInterface: React.FC<RecordingInterfaceProps> = ({
     } else {
       category = formatToCategoryMap[format] || "Raw Text";
     }
+
     const pet = selectedPet ? mockPets.find(p => p.id === selectedPet) : null;
     const clinic = selectedClinic ? mockClinics.find(c => c.id === selectedClinic) : null;
     
@@ -881,8 +831,8 @@ const RecordingInterface: React.FC<RecordingInterfaceProps> = ({
 
     const transcriptionData = {
       title: selectedTemplate 
-        ? `${selectedTemplate.name}  ${pet?.name || ''}`
-        : `${pet?.name || 'Untitled'}  ${visitType || 'Raw Text Note'}`,
+        ? `${selectedTemplate.name} - ${pet?.name || ''}`
+        : `${pet?.name || 'Untitled'} - ${visitType || 'Raw Text Note'}`,
       content: transcriptionText,
       category: category,
       petName: pet?.name,
@@ -936,9 +886,7 @@ const RecordingInterface: React.FC<RecordingInterfaceProps> = ({
         newTranscription
       ]));
       
-      // Reset all states after successful save
       resetAllStates();
-      
       alert("Transcription saved successfully to database!");
     } catch (error: any) {
       console.error("Error saving transcription:", error);
@@ -946,24 +894,23 @@ const RecordingInterface: React.FC<RecordingInterfaceProps> = ({
     }
   };
 
-  // Function to reset all states
   const resetAllStates = () => {
     setRecordingTime(0);
     setTranscriptionText("");
     setEditableText("");
     setTemplateText("");
-    setSpeechText("");
     setSelectedPet(undefined);
     setSelectedClinic(undefined);
     setVisitType("");
     setSelectedTemplate(null);
-    setTemplateFields([]);
     setAudioFile(null);
     setAudioUrl(null);
     setIsSaveDialogOpen(false);
     setIsEditMode(false);
     setHasContent(false);
     setTranscriptionResult("");
+    setFieldDetectionHistory([]);
+    fieldAI.current.reset();
     resetTranscript();
   };
 
@@ -995,7 +942,12 @@ const RecordingInterface: React.FC<RecordingInterfaceProps> = ({
     show: { opacity: 1, y: 0, transition: { duration: 0.5 } },
   };
 
-  // Template selection component
+  // Get current detected fields for display
+  const getCurrentDetectedFields = () => {
+    return fieldDetectionHistory.slice(-6); // Show last 6 detected fields
+  };
+
+  // Updated Template Selection Component
   const TemplateSelection = () => (
     <Dialog open={isTemplateDialogOpen} onOpenChange={setIsTemplateDialogOpen}>
       <DialogTrigger asChild>
@@ -1015,38 +967,71 @@ const RecordingInterface: React.FC<RecordingInterfaceProps> = ({
             Choose a template to use for your transcription
           </DialogDescription>
         </DialogHeader>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 py-4">
-          {VisitTypeTemplates.map((template) => (
-            <Card 
-              key={template.id} 
-              className={`cursor-pointer transition-all hover:shadow-md ${
-                selectedTemplate?.id === template.id ? 'border-primary bg-primary/5' : ''
-              }`}
-              onClick={() => handleTemplateSelect(template)}
+        
+        {isLoadingTemplates ? (
+          <div className="flex justify-center items-center py-8">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+            <span className="ml-2">Loading templates...</span>
+          </div>
+        ) : availableTemplates.length === 0 ? (
+          <div className="text-center py-8">
+            <p className="text-muted-foreground">No templates found.</p>
+            <Button 
+              variant="link" 
+              onClick={() => window.open('/templates', '_blank')}
+              className="mt-2"
             >
-              <CardHeader>
-                <CardTitle className="text-lg">{template.name}</CardTitle>
-                {template.description && (
-                  <p className="text-sm text-muted-foreground">{template.description}</p>
-                )}
-              </CardHeader>
-              <CardContent>
-                <div className="text-xs text-muted-foreground">
-                  <p className="font-medium mb-1">Detectable Fields:</p>
-                  <div className="grid grid-cols-2 gap-1">
-                    {template.fields.slice(0, 6).map((field, index) => (
-                      <span key={index} className="truncate">{field.label}</span>
-                    ))}
-                    {template.fields.length > 6 && (
-                      <span className="text-primary">+{template.fields.length - 6} more</span>
-                    )}
+              Create your first template
+            </Button>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 py-4">
+            {availableTemplates.map((template) => (
+              <Card 
+                key={template.id} 
+                className={`cursor-pointer transition-all hover:shadow-md ${
+                  selectedTemplate?.id === template.id ? 'border-primary bg-primary/5' : ''
+                }`}
+                onClick={() => handleTemplateSelect(template)}
+              >
+                <CardHeader>
+                  <CardTitle className="text-lg">{template.name}</CardTitle>
+                  {template.description && (
+                    <p className="text-sm text-muted-foreground">{template.description}</p>
+                  )}
+                </CardHeader>
+                <CardContent>
+                  <div className="text-xs text-muted-foreground">
+                    <p className="font-medium mb-1">AI-Detectable Fields:</p>
+                    <div className="grid grid-cols-2 gap-1">
+                      {template.fields.slice(0, 6).map((field, index) => (
+                        <span key={index} className="truncate">{field.label}</span>
+                      ))}
+                      {template.fields.length > 6 && (
+                        <span className="text-primary">+{template.fields.length - 6} more</span>
+                      )}
+                    </div>
                   </div>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-        <DialogFooter>
+                </CardContent>
+                {template.created_at && (
+                  <CardFooter className="pt-0">
+                    <p className="text-xs text-muted-foreground">
+                      Created: {new Date(template.created_at).toLocaleDateString()}
+                    </p>
+                  </CardFooter>
+                )}
+              </Card>
+            ))}
+          </div>
+        )}
+        
+        <DialogFooter className="flex justify-between">
+          <Button 
+            variant="outline" 
+            onClick={() => window.open('/templates', '_blank')}
+          >
+            Manage Templates
+          </Button>
           <Button variant="outline" onClick={() => setIsTemplateDialogOpen(false)}>
             Cancel
           </Button>
@@ -1252,7 +1237,7 @@ const RecordingInterface: React.FC<RecordingInterfaceProps> = ({
                   <TemplateSelection />
                   {selectedTemplate && (
                     <Button variant="outline" size="sm" onClick={resetFieldValues} className="ml-2">
-                      Reset Fields
+                      Reset AI Fields
                     </Button>
                   )}
                 </div>
@@ -1274,27 +1259,31 @@ const RecordingInterface: React.FC<RecordingInterfaceProps> = ({
                   </div>
                 )}
 
-                {/* Field Detection Status */}
-                {selectedTemplate && templateFields.length > 0 && (isRecording || transcriptionResult) && (
+                {/* AI Field Detection Status */}
+                {selectedTemplate && (isRecording || transcriptionResult) && (
                   <div className="mt-4 p-4 bg-blue-50 rounded-md">
-                    <h4 className="font-medium text-sm mb-2">Detected Fields:</h4>
-                    <div className="grid grid-cols-2 gap-2">
-                      {templateFields.slice(0, 6).map((field, index) => (
-                        <div key={index} className={`p-2 rounded text-xs ${
-                          field.value ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600'
-                        }`}>
-                          <span className="font-medium">{field.label}:</span>
-                          {field.value ? ` ${field.value}` : ' Not detected'}
+                    <h4 className="font-medium text-sm mb-2">
+                      {isRecording ? "🤖 AI Field Detection (Live):" : "AI Detected Fields:"}
+                    </h4>
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                      {getCurrentDetectedFields().map((detection, index) => (
+                        <div key={index} className="p-2 rounded text-xs bg-green-100 text-green-800">
+                          <span className="font-medium">{detection.field}:</span>
+                          {` ${detection.value}`}
                         </div>
                       ))}
-                      {templateFields.length > 6 && (
-                        <div className="p-2 rounded text-xs bg-blue-100 text-blue-800">
-                          +{templateFields.length - 6} more fields
+                      {fieldDetectionHistory.length === 0 && (
+                        <div className="p-2 rounded text-xs bg-gray-100 text-gray-600 col-span-full text-center">
+                          No fields detected yet. Speak field names like "name of patient Dolly"
                         </div>
                       )}
                     </div>
                     <div className="mt-2 text-xs text-blue-600">
-                      <p>Detected from {isRecording ? 'live recording' : 'uploaded audio'}</p>
+                      <p>
+                        {isRecording 
+                          ? "Speak naturally: 'name of patient Dolly age 5 years species dog'" 
+                          : 'Fields detected from audio'}
+                      </p>
                     </div>
                   </div>
                 )}

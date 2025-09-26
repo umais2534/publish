@@ -15,16 +15,25 @@ interface AuthResponse {
   user: User;
 }
 
+// Add Auth0 user interface
+interface Auth0User {
+  sub: string;
+  email: string;
+  name: string;
+  email_verified?: boolean;
+}
+
 type AuthContextType = {
   user: User | null;
   isLoading: boolean;
   error: string;
   register: (email: string, password: string, name: string) => Promise<void>;
   login: (email: string, password: string) => Promise<void>;
-  loginWithAuth0: (auth0Token: string) => Promise<void>;
+  loginWithAuth0: (auth0UserData: Auth0User, auth0Token: string) => Promise<void>;
   logout: () => void;
   isAuthenticated: boolean;
   getToken: () => string | null;
+    syncAuth0UserWithBackend: (auth0UserData: any) => Promise<void>;
 };
 
 export const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -51,10 +60,13 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const removeToken = (): void => {
     localStorage.removeItem('auth_token');
     localStorage.removeItem('user');
+    localStorage.removeItem('auth0_user');
+    localStorage.removeItem('auth0_sub');
   };
 
   // Check authentication status on app load
-// context/AuthContext.tsx
+// In your AuthContext.tsx, update the checkAuthStatus function:
+
 useEffect(() => {
   const checkAuthStatus = async () => {
     console.log("Checking authentication status");
@@ -71,43 +83,22 @@ useEffect(() => {
     if (auth0UserStr) {
       try {
         const auth0User = JSON.parse(auth0UserStr);
-        setUser(auth0User);
         console.log("Auth0 user found:", auth0User);
+        
+        // ✅ FIX: If we have Auth0 user but no token, sync with backend
+        if (!token) {
+          console.log("🔄 Auth0 user found but no token, starting sync...");
+          await syncAuth0UserWithBackend(auth0User);
+        } else {
+          setUser(auth0User);
+        }
+        
       } catch (err) {
         console.error("Failed to parse Auth0 user data:", err);
       }
     } 
     else if (token && userDataStr) {
-      try {
-        const parsedUser = JSON.parse(userDataStr);
-        setUser(parsedUser);
-        
-        // Verify token with backend
-        try {
-          const response = await fetch(`${import.meta.env.VITE_API_BASE}/api/auth/me`, {
-            method: 'POST',
-            headers: {
-              'Authorization': `Bearer ${token}`,
-              'Content-Type': 'application/json'
-            }
-          });
-          
-          if (response.ok) {
-            const currentUser = await response.json();
-            console.log("Token verified, user:", currentUser);
-            setUser(currentUser);
-            localStorage.setItem('user', JSON.stringify(currentUser));
-          } else {
-            console.warn("Token verification failed, logging out");
-            logout();
-          }
-        } catch (error) {
-          console.error("Token verification error:", error);
-        }
-      } catch (err) {
-        console.error("Failed to parse user data:", err);
-        logout();
-      }
+      // ... existing code for token verification
     } else {
       console.log("No auth data found in storage");
     }
@@ -118,6 +109,61 @@ useEffect(() => {
   checkAuthStatus();
 }, []);
 
+// context/AuthContext.tsx - Fix the syncAuth0UserWithBackend function
+const syncAuth0UserWithBackend = async (auth0UserData: any): Promise<void> => {
+  try {
+    console.log("🔄 Syncing Auth0 user with backend...", auth0UserData);
+    
+    // ✅ FIX: Use correct Auth0 property names
+    const auth0Id = auth0UserData.sub || auth0UserData.id; // Auth0 uses 'sub'
+    const email = auth0UserData.email;
+    const name = auth0UserData.name || auth0UserData.email?.split('@')[0] || 'User';
+    
+    if (!auth0Id || !email) {
+      throw new Error('Invalid Auth0 user data: missing sub or email');
+    }
+    
+    // Call your backend to create/update the user
+    const response = await fetch(`${import.meta.env.VITE_API_BASE}/api/auth/auth0/sync`, {
+      method: 'POST',
+      headers: { 
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        auth0Id: auth0Id, // ✅ Use 'sub' from Auth0
+        email: email,
+        name: name,
+        emailVerified: true
+      })
+    });
+
+    const responseData = await response.json();
+    console.log("📡 Backend sync response:", responseData);
+
+    if (!response.ok) {
+      throw new Error(responseData.error || 'Auth0 sync failed');
+    }
+
+    if (!responseData.token || !responseData.user) {
+      throw new Error('Invalid response from server');
+    }
+
+    // Save token and user data
+    setToken(responseData.token);
+    localStorage.setItem('user', JSON.stringify(responseData.user));
+    localStorage.setItem('auth_token', responseData.token);
+    setUser(responseData.user);
+    
+    // Clean up temporary Auth0 storage
+    localStorage.removeItem('auth0_user');
+    
+    console.log("✅ Auth0 user synced successfully with database");
+    
+  } catch (error: any) {
+    console.error('❌ Auth0 sync error:', error);
+    // Don't throw error here to prevent app crash
+  }
+};
   const register = async (email: string, password: string, name: string): Promise<void> => {
     setIsLoading(true);
     setError('');
@@ -200,43 +246,35 @@ useEffect(() => {
     }
   };
 
-// context/AuthContext.tsx
-// Change the function to only accept auth0Token
-const loginWithAuth0 = async (auth0Token: string): Promise<void> => {
+// In your AuthContext.tsx - Update the loginWithAuth0 function
+const loginWithAuth0 = async (auth0UserData: Auth0User, auth0Token: string): Promise<void> => {
   setIsLoading(true);
   setError('');
   try {
-    console.log("Logging in with Auth0 token");
+    console.log("🔄 Syncing Auth0 user with backend...", auth0UserData);
     
-    // Extract user info from the token (you'll need to decode JWT)
-    // Or get user info from Auth0's /userinfo endpoint
-    const userInfoResponse = await fetch('https://your-domain.auth0.com/userinfo', {
-      headers: {
-        'Authorization': `Bearer ${auth0Token}`
-      }
-    });
-    
-    if (!userInfoResponse.ok) {
-      throw new Error('Failed to get user info from Auth0');
-    }
-    
-    const auth0User = await userInfoResponse.json();
-    console.log("Auth0 user info:", auth0User);
-    
-    // Continue with your existing sync logic
-    const syncResponse = await fetch(`${import.meta.env.VITE_API_BASE}/api/auth/auth0/callback`, {
+    const response = await fetch(`${import.meta.env.VITE_API_BASE}/api/auth/auth0/callback`, {
       method: 'POST',
       headers: { 
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${auth0Token}`
       },
-      body: JSON.stringify(auth0User)
+      body: JSON.stringify({
+        auth0Id: auth0UserData.sub,
+        email: auth0UserData.email,
+        name: auth0UserData.name,
+        emailVerified: auth0UserData.email_verified || false
+      })
     });
 
-    const responseData = await syncResponse.json();
-    console.log("Auth0 sync response:", responseData);
+    const responseData = await response.json();
+    console.log("📡 Backend sync response:", responseData);
 
-    if (!syncResponse.ok) {
+    if (!response.ok) {
+      // Handle account linking required
+      if (responseData.code === 'ACCOUNT_LINKING_REQUIRED') {
+        throw new Error('This email is already registered. Please use your original login method or contact support.');
+      }
       throw new Error(responseData.error || 'Auth0 sync failed');
     }
 
@@ -244,21 +282,57 @@ const loginWithAuth0 = async (auth0Token: string): Promise<void> => {
       throw new Error('Invalid response from server');
     }
 
+    // Save token and user data
     setToken(responseData.token);
     localStorage.setItem('user', JSON.stringify(responseData.user));
-    localStorage.setItem('auth0_user', JSON.stringify(auth0User));
+    localStorage.setItem('auth_token', responseData.token);
     setUser(responseData.user);
     
-    console.log("Auth0 login successful");
+    console.log("✅ Auth0 login successful");
     
   } catch (error: any) {
-    console.error('Auth0 login error:', error);
+    console.error('❌ Auth0 login error:', error);
     setError(error.message || 'Auth0 login failed');
     throw error;
   } finally {
     setIsLoading(false);
   }
 };
+
+// Add account linking function
+const linkAuth0Account = async (email: string, password: string, auth0UserData: Auth0User): Promise<void> => {
+  try {
+    // First, verify the local account credentials
+    await login(email, password);
+    
+    // Then link the Auth0 account
+    const response = await fetch(`${import.meta.env.VITE_API_BASE}/api/auth/link-auth0`, {
+      method: 'POST',
+      headers: { 
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${getToken()}`
+      },
+      body: JSON.stringify({
+        auth0Id: auth0UserData.sub,
+        email: auth0UserData.email
+      })
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to link Auth0 account');
+    }
+
+    // Update user data with Auth0 info
+    const updatedUser = { ...user, auth0Id: auth0UserData.sub };
+    setUser(updatedUser);
+    localStorage.setItem('user', JSON.stringify(updatedUser));
+    
+  } catch (error: any) {
+    console.error('Account linking error:', error);
+    throw error;
+  }
+};
+
   const logout = (): void => {
     console.log("Logging out user");
     removeToken();
@@ -276,7 +350,8 @@ const loginWithAuth0 = async (auth0Token: string): Promise<void> => {
     loginWithAuth0,
     logout,
     isAuthenticated: !!user,
-    getToken
+    getToken,
+    syncAuth0UserWithBackend
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

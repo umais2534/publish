@@ -1,10 +1,10 @@
 import { WebAuth } from 'auth0-js';
 
 export const auth0Config = {
-  domain: "dev-71r63f04fjc8xxz2.us.auth0.com",
-  clientId: "BC7bseyZ4zMaWPEkz9o44h4foOmX7Ooz",
+  domain: "dev-425tsbqbsydrl817.us.auth0.com",
+  clientId: "khOeXW1zhuOR8qAz4xHbOIhtWVsMWy9y",
   redirectUri: window.location.origin + "/callback",
-  audience: "https://dev-71r63f04fjc8xxz2.us.auth0.com/api/v2/",
+  audience: "https://dev-425tsbqbsydrl817.us.auth0.com/api/v2/",
 };
 
 export const initAuth0 = () => {

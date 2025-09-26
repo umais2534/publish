@@ -1,93 +1,115 @@
-// components/Auth0Callback.tsx - UPDATED
+// src/pages/AuthCallbackPage.tsx
 import { useEffect, useState } from 'react';
-import { useAuth } from '@/context/AuthContext';
 import { useNavigate } from 'react-router-dom';
-import { Loader2, AlertCircle } from 'lucide-react';
+import { useAuth0 } from '@auth0/auth0-react';
+import { Loader2, CheckCircle, XCircle } from 'lucide-react';
 
-const Auth0Callback = () => {
-  const { loginWithAuth0 } = useAuth();
+export default function AuthCallbackPage() {
   const navigate = useNavigate();
-  const [error, setError] = useState<string>('');
+  const { isLoading, isAuthenticated, error, user } = useAuth0();
+  const [status, setStatus] = useState<'loading' | 'success' | 'error'>('loading');
+  const [message, setMessage] = useState<string>('Completing authentication...');
 
   useEffect(() => {
-    const handleAuth0Callback = async () => {
+    const handleCallback = async () => {
       try {
-        console.log('🔄 Auth0 callback processing started...');
-        
-        // Method 1: Check URL hash (standard Auth0 flow)
-        const hashParams = new URLSearchParams(window.location.hash.substr(1));
-        const accessToken = hashParams.get('access_token');
-        
-        // Method 2: Check query parameters
-        const urlParams = new URLSearchParams(window.location.search);
-        const tokenFromQuery = urlParams.get('token');
-        
-        let tokenToUse = accessToken || tokenFromQuery;
-        
-        console.log('🔍 Token search results:', {
-          accessToken: !!accessToken,
-          tokenFromQuery: !!tokenFromQuery,
-          tokenToUse: !!tokenToUse
-        });
-
-        if (!tokenToUse) {
-          throw new Error('No authentication token found in URL');
+        if (isLoading) {
+          setStatus('loading');
+          setMessage('Completing authentication...');
+          return;
         }
 
-        console.log('✅ Token found, attempting login...');
-        
-        // Use your AuthContext function
-        await loginWithAuth0(tokenToUse);
-        
-        console.log('✅ Login successful, redirecting...');
-        
-        // Clear URL parameters
-        window.history.replaceState({}, document.title, window.location.pathname);
-        
-        // Redirect to dashboard
-        navigate('/dashboard', { replace: true });
-        
-      } catch (error) {
-        console.error('❌ Auth0 callback error:', error);
-        setError(error instanceof Error ? error.message : 'Unknown error occurred');
-        
-        // Redirect to login after delay
-        setTimeout(() => {
-          navigate('/login', { 
-            replace: true,
-            state: { 
-              error: 'Authentication failed. Please try again.'
-            } 
-          });
-        }, 3000);
+        if (error) {
+          console.error('Auth0 callback error:', error);
+          setStatus('error');
+          setMessage('Authentication failed. Please try again.');
+          setTimeout(() => navigate('/login', { replace: true }), 3000);
+          return;
+        }
+
+        if (isAuthenticated && user) {
+          setStatus('success');
+          setMessage('Authentication successful! Redirecting...');
+          
+          // Store basic user info immediately
+          const userInfo = {
+            id: user.sub || '',
+            email: user.email || '',
+            name: user.name || user.email || '',
+            auth0Id: user.sub
+          };
+          
+          localStorage.setItem('auth0_user', JSON.stringify(userInfo));
+          localStorage.setItem('auth_token', `auth0_${user.sub}`);
+          
+          // Redirect to dashboard after a brief delay
+          setTimeout(() => {
+            navigate('/dashboard', { replace: true });
+          }, 1000);
+        } else {
+          setStatus('error');
+          setMessage('Authentication incomplete. Redirecting to login...');
+          setTimeout(() => navigate('/login', { replace: true }), 3000);
+        }
+      } catch (err) {
+        console.error('Callback handling error:', err);
+        setStatus('error');
+        setMessage('An unexpected error occurred.');
+        setTimeout(() => navigate('/login', { replace: true }), 3000);
       }
     };
 
-    handleAuth0Callback();
-  }, [loginWithAuth0, navigate]);
+    handleCallback();
+  }, [isLoading, isAuthenticated, error, user, navigate]);
 
-  if (error) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="flex flex-col items-center text-red-600">
-          <AlertCircle className="h-8 w-8 mb-4" />
-          <h3 className="text-lg font-semibold">Authentication Error</h3>
-          <p className="text-sm mt-2">{error}</p>
-          <p className="text-xs mt-4">Redirecting to login...</p>
-        </div>
-      </div>
-    );
-  }
+  const renderContent = () => {
+    switch (status) {
+      case 'loading':
+        return (
+          <>
+            <Loader2 className="animate-spin h-8 w-8 text-blue-500 mx-auto mb-4" />
+            <h2 className="text-xl font-semibold text-gray-800">Authenticating...</h2>
+            <p className="text-gray-600">{message}</p>
+          </>
+        );
+      case 'success':
+        return (
+          <>
+            <CheckCircle className="h-8 w-8 text-green-500 mx-auto mb-4" />
+            <h2 className="text-xl font-semibold text-gray-800">Success!</h2>
+            <p className="text-gray-600">{message}</p>
+          </>
+        );
+      case 'error':
+        return (
+          <>
+            <XCircle className="h-8 w-8 text-red-500 mx-auto mb-4" />
+            <h2 className="text-xl font-semibold text-gray-800">Authentication Failed</h2>
+            <p className="text-gray-600">{message}</p>
+            {error && (
+              <p className="text-sm text-red-500 mt-2">
+                Error: {error.message}
+              </p>
+            )}
+          </>
+        );
+      default:
+        return null;
+    }
+  };
 
   return (
-    <div className="flex items-center justify-center min-h-screen">
-      <div className="flex flex-col items-center">
-        <Loader2 className="animate-spin h-8 w-8 text-blue-500 mb-4" />
-        <p className="text-gray-600">Completing authentication...</p>
-        <p className="text-xs text-gray-400 mt-2">Please wait</p>
+    <div className="flex items-center justify-center min-h-screen bg-gray-50">
+      <div className="text-center p-8 bg-white rounded-lg shadow-md max-w-md mx-4">
+        {renderContent()}
+        {status === 'loading' && (
+          <div className="mt-4">
+            <div className="w-full bg-gray-200 rounded-full h-1.5">
+              <div className="bg-blue-500 h-1.5 rounded-full animate-pulse"></div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
-};
-
-export default Auth0Callback;
+}

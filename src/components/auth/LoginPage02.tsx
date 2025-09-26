@@ -1,13 +1,19 @@
-import React, { useState, useEffect } from 'react';
-import { useAuth } from '@/hooks/useAuth';
+import React, { useState, useEffect,useContext  } from 'react';
+import { useAuth } from '../../hooks/useAuth';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { User, Lock, LogOut, Loader2 } from 'lucide-react';
 import Auth0LoginButton from '../auth/Auth0LoginButton';
-
+import { AuthContext } from '../../context/AuthContext'; 
 const LoginPage = () => {
+    const authContext = useContext(AuthContext);
+  
+  if (!authContext) {
+    throw new Error('LoginPage must be used within AuthProvider');
+  }
+
   const {
     isAuthenticated,
     isLoading,
@@ -15,6 +21,7 @@ const LoginPage = () => {
     login,
     logout,
     error,
+  syncAuth0UserWithBackend
   } = useAuth();
   const navigate = useNavigate();
   const [email, setEmail] = useState("");

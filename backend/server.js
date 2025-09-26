@@ -185,16 +185,22 @@ const authenticateJWTWithQuery = async (req, res, next) => {
 };
 
 const dbConfig = {
-  server: 'purrscribe-db-migration.database.windows.net',
-  database: 'purrscribe-db-migration',
-  user: 'sqladmin',
-  password: 'Aleem2534', 
+  user: 'sa',
+  password: 'Zarish2534#',
+  server: 'localhost',
+  database: 'PurrscribeAI',
   options: {
-    encrypt: true,
-    trustServerCertificate: false,
+    encrypt: false,
+    trustServerCertificate: true,
     enableArithAbort: true
+  },
+  pool: {
+    max: 10,
+    min: 0,
+    idleTimeoutMillis: 30000
   }
 };
+
 let pool;
 async function getPool() {
   if (pool) return pool;
@@ -303,7 +309,7 @@ await pool.request().query(`
     id INT PRIMARY KEY IDENTITY(1,1),
     auth0_id NVARCHAR(255) UNIQUE,
     email NVARCHAR(255) NOT NULL UNIQUE,
-    password NVARCHAR(255),
+     password NVARCHAR(255) NULL,
     name NVARCHAR(255),
     email_verified BIT DEFAULT 0,
     professional_title NVARCHAR(255),
@@ -313,6 +319,13 @@ await pool.request().query(`
     createdAt DATETIME DEFAULT GETDATE(),
     updatedAt DATETIME DEFAULT GETDATE()
   )
+        CONSTRAINT UQ_Users_Email UNIQUE (email),
+    CONSTRAINT UQ_Users_Auth0Id UNIQUE (auth0_id)
+)
+
+-- Drop the existing problematic constraint if it exists
+IF EXISTS (SELECT * FROM sys.indexes WHERE name = 'UQ__Users__AB6E61645403100E')
+    ALTER TABLE Users DROP CONSTRAINT UQ__Users__AB6E61645403100E
 `);
 
 
@@ -956,19 +969,6 @@ app.get('/api/health', async (req, res) => {
   }
 });
 const port = process.env.PORT || 3000;
-
-
-// === ADD STATIC SERVING CODE HERE (BEFORE app.listen) ===
-app.use(express.static(path.join(__dirname, '../dist')));
-
-// SPA fallback - all routes to index.html
-app.get('*', (req, res) => {
-  res.sendFile(path.join(__dirname, '../dist/index.html'));
-});
-
-app.listen(port, '0.0.0.0', () => {
-    console.log(`🚀 Server running on port ${port}`);
-});
 app.listen(port, '0.0.0.0', () => {
     console.log(`🚀 Server running on port ${port}`);
     console.log(`🌐 Environment: ${process.env.NODE_ENV || 'development'}`);
@@ -2952,28 +2952,75 @@ app.post('/api/user/payment-methods/:id/set-default', authenticateJWT, async (re
 });
 // Auth0 callback endpoint
 
-// Update the Auth0 callback endpoint to properly handle user creation/retrieval
-// Auth0 callback endpoint - UPDATED
-// Auth0 callback endpoint - UPDATED
-app.post('/api/auth/auth0/callback', checkJwt, syncAuth0User, async (req, res) => {
+// Improved Auth0 callback endpoint
+app.post('/api/auth/auth0/callback', checkJwt, async (req, res) => {
   try {
     const auth0User = req.auth.payload;
+    console.log('🔐 Auth0 callback received:', {
+      sub: auth0User.sub,
+      email: auth0User.email,
+      name: auth0User.name
+    });
+
     const pool = await getPool();
     
-    // Get user from database
-    const result = await pool.request()
+    // Check if user exists by auth0_id OR email
+    const userResult = await pool.request()
       .input('auth0Id', sql.NVarChar, auth0User.sub)
+      .input('email', sql.NVarChar, auth0User.email)
       .query(`
-        SELECT id, email, name, auth0_id, createdAt 
-        FROM Users 
-        WHERE auth0_id = @auth0Id
+        SELECT * FROM Users 
+        WHERE auth0_id = @auth0Id OR email = @email
+        ORDER BY 
+          CASE 
+            WHEN auth0_id = @auth0Id THEN 1
+            ELSE 2 
+          END
       `);
     
-    if (result.recordset.length === 0) {
-      return res.status(404).json({ error: "User not found in database" });
-    }
+    let user;
     
-    const user = result.recordset[0];
+    if (userResult.recordset.length === 0) {
+      // Create new user
+      console.log('👤 Creating new user from Auth0...');
+      const createResult = await pool.request()
+        .input('auth0Id', sql.NVarChar, auth0User.sub)
+        .input('email', sql.NVarChar, auth0User.email)
+        .input('name', sql.NVarChar, auth0User.name || auth0User.email.split('@')[0])
+        .input('emailVerified', sql.Bit, auth0User.email_verified ? 1 : 0)
+        .query(`
+          INSERT INTO Users (auth0_id, email, name, email_verified, createdAt, updatedAt)
+          OUTPUT inserted.id, inserted.email, inserted.name, inserted.auth0_id, inserted.createdAt
+          VALUES (@auth0Id, @email, @name, @emailVerified, GETDATE(), GETDATE())
+        `);
+      
+      user = createResult.recordset[0];
+      console.log('✅ New user created:', user.email);
+    } else {
+      // User exists - handle account linking
+      user = userResult.recordset[0];
+      
+      if (user.auth0_id !== auth0User.sub) {
+        console.log('🔗 Linking Auth0 account to existing user...');
+        
+        // Update user with Auth0 ID
+        await pool.request()
+          .input('id', sql.Int, user.id)
+          .input('auth0Id', sql.NVarChar, auth0User.sub)
+          .input('emailVerified', sql.Bit, auth0User.email_verified ? 1 : 0)
+          .query(`
+            UPDATE Users 
+            SET auth0_id = @auth0Id, 
+                email_verified = @emailVerified,
+                updatedAt = GETDATE()
+            WHERE id = @id
+          `);
+        
+        user.auth0_id = auth0User.sub;
+      }
+      
+      console.log('✅ Existing user authenticated:', user.email);
+    }
     
     // Generate JWT token
     const token = jwt.sign(
@@ -2983,7 +3030,125 @@ app.post('/api/auth/auth0/callback', checkJwt, syncAuth0User, async (req, res) =
         name: user.name,
         auth0Id: user.auth0_id 
       },
-      process.env.JWT_SECRET,
+      process.env.JWT_SECRET || 'your-secret-key',
+      { expiresIn: '24h' }
+    );
+    
+    res.json({
+      success: true,
+      token,
+      user: {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        auth0Id: user.auth0_id,
+        createdAt: user.createdAt
+      }
+    });
+    
+  } catch (error) {
+    console.error('❌ Auth0 callback error:', error);
+    
+    // Handle specific error cases
+    if (error.number === 2627) {
+      return res.status(409).json({ 
+        success: false,
+        error: 'Account linking required',
+        code: 'ACCOUNT_LINKING_REQUIRED',
+        message: 'This email is already registered with a different authentication method.'
+      });
+    }
+    
+    res.status(500).json({ 
+      success: false,
+      error: 'Authentication failed',
+      details: error.message 
+    });
+  }
+});
+// Add this with your other auth routes
+// Improved Auth0 sync endpoint
+app.post('/api/auth/auth0/sync', async (req, res) => {
+  try {
+    const { auth0Id, email, name, emailVerified } = req.body;
+    
+    console.log("🔄 Auth0 sync request:", { auth0Id, email, name });
+    
+    if (!auth0Id || !email) {
+      return res.status(400).json({ error: 'Auth0 ID and email are required' });
+    }
+
+    const pool = await getPool();
+    
+    // Check if user exists by auth0_id OR email
+    const userResult = await pool.request()
+      .input('auth0Id', sql.NVarChar, auth0Id)
+      .input('email', sql.NVarChar, email)
+      .query(`
+        SELECT * FROM Users 
+        WHERE auth0_id = @auth0Id OR email = @email
+        ORDER BY 
+          CASE 
+            WHEN auth0_id = @auth0Id THEN 1  -- Prefer exact auth0_id match
+            ELSE 2 
+          END
+      `);
+    
+    let user;
+    
+    if (userResult.recordset.length === 0) {
+      // Create new user
+      console.log("📝 Creating new user for Auth0 ID:", auth0Id);
+      const createResult = await pool.request()
+        .input('auth0Id', sql.NVarChar, auth0Id)
+        .input('email', sql.NVarChar, email)
+        .input('name', sql.NVarChar, name || email.split('@')[0])
+        .input('emailVerified', sql.Bit, emailVerified ? 1 : 0)
+        .query(`
+          INSERT INTO Users (auth0_id, email, name, email_verified, createdAt, updatedAt)
+          OUTPUT inserted.id, inserted.email, inserted.name, inserted.auth0_id, inserted.createdAt
+          VALUES (@auth0Id, @email, @name, @emailVerified, GETDATE(), GETDATE())
+        `);
+      
+      user = createResult.recordset[0];
+    } else {
+      // User exists - update with Auth0 info
+      user = userResult.recordset[0];
+      console.log("✅ User found, updating Auth0 info:", user.id);
+      
+      // If user exists by email but not by auth0_id, link the Auth0 account
+      if (user.auth0_id !== auth0Id) {
+        await pool.request()
+          .input('id', sql.Int, user.id)
+          .input('auth0Id', sql.NVarChar, auth0Id)
+          .input('name', sql.NVarChar, name || email.split('@')[0])
+          .input('emailVerified', sql.Bit, emailVerified ? 1 : 0)
+          .query(`
+            UPDATE Users 
+            SET auth0_id = @auth0Id, 
+                name = COALESCE(@name, name),
+                email_verified = @emailVerified,
+                updatedAt = GETDATE()
+            WHERE id = @id
+          `);
+        
+        // Refresh user data
+        const updatedResult = await pool.request()
+          .input('id', sql.Int, user.id)
+          .query('SELECT * FROM Users WHERE id = @id');
+        
+        user = updatedResult.recordset[0];
+      }
+    }
+    
+    // Generate token
+    const token = jwt.sign(
+      { 
+        userId: user.id, 
+        email: user.email,
+        auth0Id: user.auth0_id 
+      }, 
+      process.env.JWT_SECRET || 'your-secret-key', 
       { expiresIn: '24h' }
     );
     
@@ -2999,8 +3164,22 @@ app.post('/api/auth/auth0/callback', checkJwt, syncAuth0User, async (req, res) =
     });
     
   } catch (error) {
-    console.error('Auth0 callback error:', error);
-    res.status(500).json({ error: 'Authentication failed' });
+    console.error('❌ Auth0 sync error:', error);
+    
+    // Handle specific SQL errors
+    if (error.number === 2627) { // Unique constraint violation
+      if (error.message.includes('email')) {
+        return res.status(409).json({ 
+          error: 'Email already exists with different authentication method',
+          code: 'EMAIL_EXISTS'
+        });
+      }
+    }
+    
+    res.status(500).json({ 
+      error: 'Failed to sync user',
+      details: error.message 
+    });
   }
 });
 app.get('/api/auth/auth0/callback', checkJwt, handleAuth0User, async (req, res) => {
@@ -3089,5 +3268,47 @@ app.get('/api/users/auth0/:auth0Id', authenticateJWT, async (req, res) => {
     console.error("Error fetching user by Auth0 ID:", error);
     res.status(500).json({ error: "Failed to fetch user" });
   }
-  
+});
+// Add this to your server.js
+app.post('/api/auth/link-auth0', authenticateJWT, async (req, res) => {
+  try {
+    const { auth0Id, email } = req.body;
+    const userId = req.user.id;
+
+    if (!auth0Id || !email) {
+      return res.status(400).json({ error: 'Auth0 ID and email are required' });
+    }
+
+    const pool = await getPool();
+    
+    // Verify that the email matches the authenticated user
+    const userResult = await pool.request()
+      .input('userId', sql.Int, userId)
+      .query('SELECT email FROM Users WHERE id = @userId');
+    
+    if (userResult.recordset.length === 0 || userResult.recordset[0].email !== email) {
+      return res.status(403).json({ error: 'Email does not match authenticated user' });
+    }
+
+    // Check if Auth0 ID is already linked to another account
+    const auth0Check = await pool.request()
+      .input('auth0Id', sql.NVarChar, auth0Id)
+      .query('SELECT id FROM Users WHERE auth0_id = @auth0Id AND id != @userId');
+    
+    if (auth0Check.recordset.length > 0) {
+      return res.status(409).json({ error: 'Auth0 account already linked to another user' });
+    }
+
+    // Link the Auth0 account
+    await pool.request()
+      .input('userId', sql.Int, userId)
+      .input('auth0Id', sql.NVarChar, auth0Id)
+      .query('UPDATE Users SET auth0_id = @auth0Id, updatedAt = GETDATE() WHERE id = @userId');
+
+    res.json({ success: true, message: 'Auth0 account linked successfully' });
+    
+  } catch (error) {
+    console.error('Account linking error:', error);
+    res.status(500).json({ error: 'Failed to link Auth0 account' });
+  }
 });

@@ -183,6 +183,10 @@ const loginWithAuth0 = async (auth0UserData: any) => {
     loginWithAuth0,
     logout,
     isAuth0Authenticated,
-    getToken, // Add getToken to the returned object
+    getToken, 
+       syncAuth0UserWithBackend: authContext?.syncAuth0UserWithBackend || (async (userData: any) => {
+      console.warn('syncAuth0UserWithBackend not available in current context');
+    })
+    // Add getToken to the returned object
   };
 };
