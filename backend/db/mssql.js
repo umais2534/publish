@@ -4,10 +4,10 @@ const connectionString = "Server=tcp:purrscribeai-sqlserver.database.windows.net
 
 // Ya phir object format mein:
 const dbConfig = {
-  server: 'purrscribeai-sqlserver.database.windows.net',
-  database: 'purrscribe-db',
-  user: 'purrscribeai_db_admin',
-  password: 'Qoro347947', 
+  server: process.env.DB_SERVER,
+  database: process.env.DB_NAME,
+  user: process.env.DB_USER,
+  password: process.env.DB_PASSWORD,
   options: {
     encrypt: true,
     trustServerCertificate: false,
