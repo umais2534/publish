@@ -6,6 +6,7 @@ export interface PetFormData {
   owner: string;
   imageUrl?: string;
   imageData?: string; 
+   phoneNumber?: string; 
   imageType?: string; 
   notes?: string;
   fileData:string
@@ -19,6 +20,7 @@ export interface Pet {
   age: string;
   owner: string;
   imageUrl?: string;
+   phoneNumber?: string; 
   notes?: string;
   createdAt: string;
 }
