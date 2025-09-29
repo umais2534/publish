@@ -1,4 +1,3 @@
-// VisitTypeTemplates.tsx
 import React, { useState, useEffect } from "react";
 import { useAuth } from "@/context/AuthContext";
 import {
@@ -14,7 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Plus, Edit, Trash2, Loader2 } from "lucide-react";
+import { Plus, Edit, Trash2 } from "lucide-react";
 import {
   Card,
   CardContent,
@@ -73,6 +72,7 @@ const VisitTypeTemplates: React.FC<VisitTypeTemplatesProps> = ({
       
       if (response.ok) {
         const templatesData = await response.json();
+        // Convert database format to VisitTypeTemplate format
         const convertedTemplates: VisitTypeTemplate[] = templatesData.map((template: any) => ({
           id: template.id.toString(),
           name: template.name,
@@ -102,22 +102,14 @@ const VisitTypeTemplates: React.FC<VisitTypeTemplatesProps> = ({
     if (!matches) return [];
 
     const fields: any[] = [];
-    const predefinedFields = ['PET_NAME', 'OWNER_NAME', 'CLINIC_NAME', 'VISIT_TYPE', 'DATE'];
-    
     matches.forEach(match => {
       const fieldName = match.replace(/[{}]/g, '');
+      const predefinedFields = ['PET_NAME', 'OWNER_NAME', 'CLINIC_NAME', 'VISIT_TYPE', 'DATE'];
       if (!predefinedFields.includes(fieldName)) {
-        const label = fieldName
-          .replace(/([A-Z])/g, ' $1')
-          .replace(/^./, str => str.toUpperCase())
-          .replace(/([a-z])([A-Z])/g, '$1 $2')
-          .replace(/_/g, ' ')
-          .trim();
-        
         fields.push({
           name: fieldName,
-          label: label,
-          pattern: '.',
+          label: fieldName.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase()),
+          pattern: /./,
           value: ""
         });
       }
@@ -153,7 +145,7 @@ const VisitTypeTemplates: React.FC<VisitTypeTemplatesProps> = ({
 
       if (response.ok) {
         const result = await response.json();
-        await fetchTemplates();
+        await fetchTemplates(); // Refresh the list
         setNewTemplate({ name: "", description: "", template: "" });
         setIsAddTemplateOpen(false);
       } else {
@@ -180,7 +172,7 @@ const VisitTypeTemplates: React.FC<VisitTypeTemplatesProps> = ({
       });
 
       if (response.ok) {
-        await fetchTemplates();
+        await fetchTemplates(); // Refresh the list
         setSelectedTemplate(null);
         setIsDeleteDialogOpen(false);
       } else {
@@ -203,7 +195,7 @@ const VisitTypeTemplates: React.FC<VisitTypeTemplatesProps> = ({
     return (
       <div className="space-y-4 mt-10 mr-8">
         <div className="flex justify-center items-center py-10">
-          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
           <span className="ml-3 text-muted-foreground">Loading templates...</span>
         </div>
       </div>
@@ -223,23 +215,23 @@ const VisitTypeTemplates: React.FC<VisitTypeTemplatesProps> = ({
             </Button>
           </DialogTrigger>
 
-          <DialogContent className="max-w-2xl">
+          <DialogContent>
             <DialogHeader>
               <DialogTitle>Create New Template</DialogTitle>
               <DialogDescription>
-                Create a new visit type template. Use {"{fieldName}"} format for auto-detection.
+                Create a new visit type template to use in your recordings.
               </DialogDescription>
             </DialogHeader>
             <div className="grid gap-4 py-4">
               <div className="grid gap-2">
-                <Label htmlFor="template-name">Template Name *</Label>
+                <Label htmlFor="template-name">Template Name</Label>
                 <Input
                   id="template-name"
                   value={newTemplate.name}
                   onChange={(e) =>
                     setNewTemplate({ ...newTemplate, name: e.target.value })
                   }
-                  placeholder="e.g., Dental Examination, Surgery Report"
+                  placeholder="e.g., Dental Examination"
                 />
               </div>
               <div className="grid gap-2">
@@ -257,7 +249,7 @@ const VisitTypeTemplates: React.FC<VisitTypeTemplatesProps> = ({
                 />
               </div>
               <div className="grid gap-2">
-                <Label htmlFor="template-content">Template Content *</Label>
+                <Label htmlFor="template-content">Template Content</Label>
                 <Textarea
                   id="template-content"
                   value={newTemplate.template}
@@ -267,25 +259,12 @@ const VisitTypeTemplates: React.FC<VisitTypeTemplatesProps> = ({
                       template: e.target.value,
                     })
                   }
-                  placeholder={`Example:
-DENTAL EXAMINATION
-
-Patient: {patientName}
-Species: {species}
-Age: {age}
-
-Findings:
-- Gingiva: {gingivaCondition}
-- Teeth: {teethCondition}
-- Tartar: {tartarLevel}
-
-Treatment: {treatmentPlan}`}
-                  className="min-h-[300px] font-mono text-sm"
+                  placeholder="Enter the template structure here. Use {fieldName} for dynamic fields."
+                  className="min-h-[200px] font-mono"
                 />
-                <div className="text-xs text-muted-foreground space-y-1">
-                  <p>💡 Use {"{fieldName}"} format for fields that will be auto-detected from speech</p>
-                  <p>💡 Predefined variables: {"{PET_NAME}"}, {"{OWNER_NAME}"}, {"{CLINIC_NAME}"}, {"{VISIT_TYPE}"}, {"{DATE}"}</p>
-                </div>
+                <p className="text-xs text-muted-foreground">
+                  Use curly braces for dynamic fields: {"{patientName}"}, {"{diagnosis}"}, etc.
+                </p>
               </div>
             </div>
             <DialogFooter>
@@ -303,43 +282,54 @@ Treatment: {treatmentPlan}`}
           <p className="text-muted-foreground">No templates found. Create your first template!</p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {templates.map((template) => (
             <Card
               key={template.id}
-              className="flex flex-col justify-between h-full shadow-lg hover:shadow-xl transition-all duration-300 border-2 border-transparent hover:border-blue-200"
+              className="flex flex-col justify-between h-full shadow-[0_10px_30px_rgba(0,0,0,0.2)] transition-transform duration-300 hover:scale-105"
             >
               <div className="flex-1 flex flex-col justify-between">
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-lg font-bold text-gray-800">
-                    {template.name}
+                <CardHeader className="pb-2">
+                  <CardTitle>
+                    <div className="relative -mt-6 bg-[#272E3F] text-white text-center pt-0 pb-2 rounded-b-[110px] overflow-hidden w-[60%] mx-auto shadow-md">
+                      <h2 className="text-[16px] font-semibold z-10 relative">{template.name}</h2>
+                      <svg
+                        className="absolute bottom-0 left-0 w-full"
+                        viewBox="0 0 500 50"
+                        preserveAspectRatio="none"
+                      >
+                        <path
+                          d="M0,0 C125,50 375,50 500,0 L500,50 L0,50 Z"
+                          fill="#272E3F"
+                        />
+                      </svg>
+                    </div>
                   </CardTitle>
                   {template.description && (
-                    <CardDescription className="text-sm">{template.description}</CardDescription>
+                    <CardDescription>{template.description}</CardDescription>
                   )}
                 </CardHeader>
 
-                <CardContent className="flex-1 space-y-3">
-                  <div className="bg-muted/30 p-3 rounded-md min-h-[120px]">
-                    <pre className="text-xs whitespace-pre-wrap font-mono text-gray-700">
-                      {template.template.length > 150
-                        ? `${template.template.substring(0, 150)}...`
+                <CardContent className="flex-1">
+                  <div className="bg-muted/50 p-3 rounded-md min-h-[140px] flex items-start">
+                    <pre className="text-xs whitespace-pre-wrap font-mono">
+                      {template.template.length > 100
+                        ? `${template.template.substring(0, 100)}...`
                         : template.template}
                     </pre>
                   </div>
-                  
                   {template.fields.length > 0 && (
-                    <div className="space-y-2">
-                      <p className="text-xs font-medium text-gray-600">Auto-Detectable Fields:</p>
-                      <div className="flex flex-wrap gap-1">
-                        {template.fields.slice(0, 5).map((field, index) => (
-                          <span key={index} className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded border border-blue-200">
+                    <div className="mt-2">
+                      <p className="text-xs font-medium">Dynamic Fields:</p>
+                      <div className="flex flex-wrap gap-1 mt-1">
+                        {template.fields.slice(0, 4).map((field, index) => (
+                          <span key={index} className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">
                             {field.label}
                           </span>
                         ))}
-                        {template.fields.length > 5 && (
-                          <span className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded border">
-                            +{template.fields.length - 5} more
+                        {template.fields.length > 4 && (
+                          <span className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded">
+                            +{template.fields.length - 4} more
                           </span>
                         )}
                       </div>
@@ -348,7 +338,7 @@ Treatment: {treatmentPlan}`}
                 </CardContent>
               </div>
 
-              <CardFooter className="flex justify-between pt-4 border-t">
+              <CardFooter className="flex justify-between mt-auto">
                 <AlertDialog
                   open={isDeleteDialogOpen && selectedTemplate?.id === template.id}
                   onOpenChange={(open) => {
@@ -361,7 +351,6 @@ Treatment: {treatmentPlan}`}
                       variant="ghost"
                       size="sm"
                       onClick={() => setSelectedTemplate(template)}
-                      className="text-red-600 hover:text-red-800 hover:bg-red-50"
                     >
                       <Trash2 className="h-4 w-4" />
                     </Button>
@@ -387,10 +376,10 @@ Treatment: {treatmentPlan}`}
                 </AlertDialog>
 
                 <Button
-                  variant="default"
+                  variant="outline"
                   size="sm"
                   onClick={() => handleUseTemplate(template)}
-                  className="bg-blue-600 hover:bg-blue-700 text-white"
+                  className="bg-[#242C3F] text-white hover:bg-white hover:text-[#242C3F]"
                 >
                   Use Template
                 </Button>

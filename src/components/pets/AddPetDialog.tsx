@@ -5,29 +5,64 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { ImageUploader } from "@/components/ui/image-uploader";
-import { PetFormData as BasePetFormData } from "./types/petTypes";
+import { PetFormData } from "./types/petTypes";
 import { useState } from "react";
-
-// Extend the PetFormData interface to include imageData and imageType
-interface PetFormData extends BasePetFormData {
-  imageData?: string;
-  imageType?: string;
-}
 
 interface AddPetDialogProps {
   isOpen: boolean;
   onOpenChange: (open: boolean) => void;
-  pet: PetFormData;
-  onPetChange: (updatedFields: Partial<PetFormData>) => void;
+  pet: PetFormData & { imageData?: string; imageType?: string };
+  onPetChange: (updatedFields: Partial<PetFormData & { imageData?: string; imageType?: string }>) => void;
   onAddPet: () => void;
 }
 
 const AddPetDialog = ({ isOpen, onOpenChange, pet, onPetChange, onAddPet }: AddPetDialogProps) => {
   const [isUploading, setIsUploading] = useState(false);
+  const [phoneError, setPhoneError] = useState('');
+
+  const handleFileUpload = (fileData: {imageData: string, imageType: string}) => {
+    onPetChange({
+      imageData: fileData.imageData,
+      imageType: fileData.imageType,
+      imageUrl: ""
+    });
+  };
+
+  const validatePhoneNumber = (phoneNumber: string) => {
+    const cleaned = phoneNumber.replace(/\D/g, '');
+    return cleaned.length >= 10;
+  };
+
+  const handlePhoneChange = (value: string) => {
+    onPetChange({ phoneNumber: value });
+    
+    if (value && !validatePhoneNumber(value)) {
+      setPhoneError('Please enter a valid phone number (at least 10 digits)');
+    } else {
+      setPhoneError('');
+    }
+  };
+
+  const formatPhoneNumber = (value: string) => {
+    const cleaned = value.replace(/\D/g, '');
+    
+    if (cleaned.length <= 3) {
+      return cleaned;
+    } else if (cleaned.length <= 6) {
+      return `(${cleaned.slice(0,3)}) ${cleaned.slice(3)}`;
+    } else {
+      return `(${cleaned.slice(0,3)}) ${cleaned.slice(3,6)}-${cleaned.slice(6,10)}`;
+    }
+  };
+
+  const handlePhoneInput = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const formatted = formatPhoneNumber(e.target.value);
+    handlePhoneChange(formatted);
+  };
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-[400px] max-h-[90vh] md:max-w-[600px] overflow-y-auto">
+      <DialogContent className="max-w-[400px] max-h-[90vh] sm:max-w-[600px] overflow-y-auto">
         <DialogHeader>
           <div className="relative -mt-6 bg-[#272E3F] text-white text-center pt-0 pb-0 rounded-b-[110px] overflow-hidden w-[40%] mx-auto">
             <h2 className="text-lg font-semibold z-10 relative">Add New Pet</h2>
@@ -40,28 +75,26 @@ const AddPetDialog = ({ isOpen, onOpenChange, pet, onPetChange, onAddPet }: AddP
             </svg>
           </div>
           <p className="text-sm text-muted-foreground mt-2">
-            Enter the details of the new pet to add to your records.
+            Add a new pet to your veterinary practice management system.
           </p>
         </DialogHeader>
-
+        
         <div className="grid gap-4 py-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="flex flex-col gap-2">
-              <Label htmlFor="name">Pet Name*</Label>
+              <Label htmlFor="name">Pet Name *</Label>
               <Input
                 id="name"
-                value={pet.name || ''}
+                value={pet.name}
                 onChange={(e) => onPetChange({ name: e.target.value })}
                 placeholder="Max"
-                required
               />
             </div>
             <div className="flex flex-col gap-2">
-              <Label htmlFor="species">Species*</Label>
+              <Label htmlFor="species">Species *</Label>
               <Select
-                value={pet.species || ''}
+                value={pet.species}
                 onValueChange={(value) => onPetChange({ species: value })}
-                required
               >
                 <SelectTrigger id="species">
                   <SelectValue placeholder="Select species" />
@@ -76,16 +109,15 @@ const AddPetDialog = ({ isOpen, onOpenChange, pet, onPetChange, onAddPet }: AddP
               </Select>
             </div>
           </div>
-
+          
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="flex flex-col gap-2">
-              <Label htmlFor="breed">Breed*</Label>
+              <Label htmlFor="breed">Breed *</Label>
               <Input
                 id="breed"
-                value={pet.breed || ''}
+                value={pet.breed}
                 onChange={(e) => onPetChange({ breed: e.target.value })}
                 placeholder="Golden Retriever"
-                required
               />
             </div>
             <div className="flex flex-col gap-2">
@@ -98,29 +130,47 @@ const AddPetDialog = ({ isOpen, onOpenChange, pet, onPetChange, onAddPet }: AddP
               />
             </div>
           </div>
-
-          <div className="flex flex-col gap-2">
-            <Label htmlFor="owner">Owner*</Label>
-            <Input
-              id="owner"
-              value={pet.owner || ''}
-              onChange={(e) => onPetChange({ owner: e.target.value })}
-              placeholder="John Smith"
-              required
-            />
+          
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="owner">Owner Name *</Label>
+              <Input
+                id="owner"
+                value={pet.owner}
+                onChange={(e) => onPetChange({ owner: e.target.value })}
+                placeholder="John Smith"
+              />
+            </div>
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="phoneNumber">Owner Phone Number *</Label>
+              <Input
+                id="phoneNumber"
+                value={pet.phoneNumber || ''}
+                onChange={handlePhoneInput}
+                placeholder="(555) 123-4567"
+                type="tel"
+                className={phoneError ? 'border-red-500' : ''}
+              />
+              {phoneError && (
+                <p className="text-xs text-red-500">{phoneError}</p>
+              )}
+              <p className="text-xs text-muted-foreground">
+                Required for WhatsApp calling feature. Include country code if international.
+              </p>
+            </div>
           </div>
-
+          
           <div className="flex flex-col gap-2">
             <Label>Pet Image</Label>
             <ImageUploader
               imageUrl={pet.imageUrl || ''}
               onImageChange={(url) => onPetChange({ imageUrl: url })}
-              onFileUpload={(fileData) => onPetChange(fileData)}
+              onFileUpload={handleFileUpload}
               placeholder="Upload a pet image or enter URL"
               disabled={isUploading}
             />
           </div>
-
+          
           <div className="flex flex-col gap-2">
             <Label htmlFor="notes">Notes</Label>
             <Textarea
@@ -133,8 +183,8 @@ const AddPetDialog = ({ isOpen, onOpenChange, pet, onPetChange, onAddPet }: AddP
             />
           </div>
         </div>
-
-        <DialogFooter className="fixed bottom-0 bg-background pt-4 pb-2">
+        
+        <DialogFooter className="fix bottom-0 bg-background pt-4 pb-2">
           <Button
             variant="outline"
             onClick={() => onOpenChange(false)}
@@ -145,7 +195,7 @@ const AddPetDialog = ({ isOpen, onOpenChange, pet, onPetChange, onAddPet }: AddP
           <Button 
             onClick={onAddPet}
             className="w-full sm:w-auto"
-            disabled={!pet.name || !pet.species || !pet.breed || !pet.owner}
+            disabled={!pet.name || !pet.species || !pet.breed || !pet.owner || !pet.phoneNumber || !!phoneError}
           >
             Add Pet
           </Button>

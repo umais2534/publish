@@ -1,4 +1,3 @@
-// EditPetDialog.tsx - Fixed version
 import { Dialog, DialogContent, DialogHeader, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -6,34 +5,60 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { ImageUploader } from "@/components/ui/image-uploader";
-import { PetFormData as BasePetFormData } from "./types/petTypes";
+import { PetFormData } from "./types/petTypes";
 import { useState } from "react";
-
-// Extend the PetFormData interface to include imageData and imageType
-interface PetFormData extends BasePetFormData {
-  imageData?: string;
-  imageType?: string;
-}
 
 interface EditPetDialogProps {
   isOpen: boolean;
   onOpenChange: (open: boolean) => void;
-  pet: PetFormData;
-  onPetChange: (updatedFields: Partial<PetFormData>) => void;
+  pet: PetFormData & { imageData?: string; imageType?: string };
+  onPetChange: (updatedFields: Partial<PetFormData & { imageData?: string; imageType?: string }>) => void;
   onSave: () => void;
   isSaving?: boolean;
 }
 
 const EditPetDialog = ({ isOpen, onOpenChange, pet, onPetChange, onSave, isSaving = false }: EditPetDialogProps) => {
   const [isUploading, setIsUploading] = useState(false);
+  const [phoneError, setPhoneError] = useState('');
 
-  // Add the onFileUpload handler
   const handleFileUpload = (fileData: {imageData: string, imageType: string}) => {
     onPetChange({
       imageData: fileData.imageData,
       imageType: fileData.imageType,
-      imageUrl: "" // Clear URL when using file upload
+      imageUrl: ""
     });
+  };
+
+  const validatePhoneNumber = (phoneNumber: string) => {
+    const cleaned = phoneNumber.replace(/\D/g, '');
+    return cleaned.length >= 10;
+  };
+
+  const handlePhoneChange = (value: string) => {
+    onPetChange({ phoneNumber: value });
+    
+    if (value && !validatePhoneNumber(value)) {
+      setPhoneError('Please enter a valid phone number (at least 10 digits)');
+    } else {
+      setPhoneError('');
+    }
+  };
+
+  const formatPhoneNumber = (value: string) => {
+    const cleaned = value.replace(/\D/g, '');
+    
+    if (cleaned.length <= 3) {
+      return cleaned;
+    } else if (cleaned.length <= 6) {
+      return `(${cleaned.slice(0,3)}) ${cleaned.slice(3)}`;
+    } else {
+      return `(${cleaned.slice(0,3)}) ${cleaned.slice(3,6)}-${cleaned.slice(6,10)}`;
+    }
+  };
+
+  const handlePhoneInput = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const formatted = formatPhoneNumber(e.target.value);
+    handlePhoneChange(formatted);
   };
 
   return (
@@ -58,7 +83,7 @@ const EditPetDialog = ({ isOpen, onOpenChange, pet, onPetChange, onSave, isSavin
         <div className="grid gap-4 py-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="flex flex-col gap-2">
-              <Label htmlFor="edit-name">Pet Name</Label>
+              <Label htmlFor="edit-name">Pet Name *</Label>
               <Input
                 id="edit-name"
                 value={pet.name || ''}
@@ -67,7 +92,7 @@ const EditPetDialog = ({ isOpen, onOpenChange, pet, onPetChange, onSave, isSavin
               />
             </div>
             <div className="flex flex-col gap-2">
-              <Label htmlFor="edit-species">Species</Label>
+              <Label htmlFor="edit-species">Species *</Label>
               <Select
                 value={pet.species || ''}
                 onValueChange={(value) => onPetChange({ species: value })}
@@ -88,7 +113,7 @@ const EditPetDialog = ({ isOpen, onOpenChange, pet, onPetChange, onSave, isSavin
           
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="flex flex-col gap-2">
-              <Label htmlFor="edit-breed">Breed</Label>
+              <Label htmlFor="edit-breed">Breed *</Label>
               <Input
                 id="edit-breed"
                 value={pet.breed || ''}
@@ -107,14 +132,33 @@ const EditPetDialog = ({ isOpen, onOpenChange, pet, onPetChange, onSave, isSavin
             </div>
           </div>
           
-          <div className="flex flex-col gap-2">
-            <Label htmlFor="edit-owner">Owner</Label>
-            <Input
-              id="edit-owner"
-              value={pet.owner || ''}
-              onChange={(e) => onPetChange({ owner: e.target.value })}
-              placeholder="John Smith"
-            />
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="edit-owner">Owner *</Label>
+              <Input
+                id="edit-owner"
+                value={pet.owner || ''}
+                onChange={(e) => onPetChange({ owner: e.target.value })}
+                placeholder="John Smith"
+              />
+            </div>
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="edit-phoneNumber">Owner Phone Number *</Label>
+              <Input
+                id="edit-phoneNumber"
+                value={pet.phoneNumber || ''}
+                onChange={handlePhoneInput}
+                placeholder="(555) 123-4567"
+                type="tel"
+                className={phoneError ? 'border-red-500' : ''}
+              />
+              {phoneError && (
+                <p className="text-xs text-red-500">{phoneError}</p>
+              )}
+              <p className="text-xs text-muted-foreground">
+                Required for WhatsApp calling feature
+              </p>
+            </div>
           </div>
           
           <div className="flex flex-col gap-2">
@@ -122,7 +166,7 @@ const EditPetDialog = ({ isOpen, onOpenChange, pet, onPetChange, onSave, isSavin
             <ImageUploader
               imageUrl={pet.imageUrl || ''}
               onImageChange={(url) => onPetChange({ imageUrl: url })}
-              onFileUpload={handleFileUpload} // ✅ Add this missing prop
+              onFileUpload={handleFileUpload}
               placeholder="Upload a pet image or enter URL"
               disabled={isUploading}
             />
@@ -153,7 +197,7 @@ const EditPetDialog = ({ isOpen, onOpenChange, pet, onPetChange, onSave, isSavin
           <Button 
             onClick={onSave}
             className="w-full sm:w-auto"
-            disabled={isSaving || !pet.name || !pet.species || !pet.breed || !pet.owner}
+            disabled={isSaving || !pet.name || !pet.species || !pet.breed || !pet.owner || !pet.phoneNumber || !!phoneError}
           >
             {isSaving ? "Saving..." : "Save Changes"}
           </Button>

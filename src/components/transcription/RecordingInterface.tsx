@@ -184,32 +184,48 @@ const RecordingInterface: React.FC<RecordingInterfaceProps> = ({
       this.fieldPatterns.set('notes', ['notes', 'note', 'comments', 'remarks', 'observation']);
     }
 
+ // ... (Constructor and initializePatterns are fine)
+
     // NEW: Advanced field detection with context awareness
     detectField(text: string): { field: string | null, value: string | null } {
-      const words = text.toLowerCase().split(/\s+/);
-      this.contextBuffer.push(...words);
-      
-      // Keep only last 20 words for context
-      if (this.contextBuffer.length > 20) {
-        this.contextBuffer = this.contextBuffer.slice(-20);
-      }
+      // 🚨 FIX 1: Pass the full transcript/text for better context, not just the latest chunk.
+      // This function will now process the WHOLE text, not just the diff.
+      // The transcript state handles the full text, so we rely on that.
 
-      // Check if we're currently in a field context
+      const fullText = text.toLowerCase();
+      
+      // 1. Check if we can extract value from the CURRENT field context.
       if (this.currentField) {
-        const value = this.extractFieldValue(text);
+        // Try to find the value in the text that came AFTER the field mention.
+        const value = this.extractFieldValue(fullText);
         if (value) {
+          // Field value found and validated
           return { field: this.currentField, value };
         }
       }
 
-      // Detect new field mentions
+      // 2. Detect NEW field mentions
       for (const [field, patterns] of this.fieldPatterns) {
         for (const pattern of patterns) {
-          const regex = new RegExp(`\\b${pattern}\\b`, 'i');
-          if (regex.test(text)) {
+          // Use a more relaxed regex to find the start of a field
+          const regex = new RegExp(`\\b${pattern}\\b\\s*([:isat]{1,3})?\\s*([^\\n\\r]+)?`, 'i');
+          const match = fullText.match(regex);
+
+          if (match) {
+            // New field detected!
             this.currentField = field;
-            this.valueBuffer = [];
+            // 🚨 Crucial: If a value immediately follows the field, capture it now.
+            const immediateValue = match[2] ? match[2].trim() : null; 
+            
+            if (immediateValue && this.isValidValue(immediateValue, field)) {
+                this.currentField = null; // Reset context, value is extracted
+                console.log(`🎯 AI detected field (Immediate): ${field}`);
+                return { field, value: immediateValue };
+            }
+            
             console.log(`🎯 AI detected field: ${field}`);
+            // Set context for future value detection
+            this.contextBuffer = fullText.split(/\s+/).slice(-10); // Clear old buffer, keep some context
             return { field, value: null };
           }
         }
@@ -218,32 +234,51 @@ const RecordingInterface: React.FC<RecordingInterfaceProps> = ({
       return { field: null, value: null };
     }
 
-    private extractFieldValue(text: string): string | null {
-      const fieldKeywords = this.getFieldKeywords(this.currentField!);
-      const words = text.toLowerCase().split(/\s+/);
+    private extractFieldValue(fullText: string): string | null {
+      // 🚨 FIX 2: We are already in a field context (this.currentField is set).
+      const field = this.currentField!;
+      const patterns = this.fieldPatterns.get(field) || [];
       
-      // Remove field mention from text
-      let cleanText = text.toLowerCase();
-      const patterns = this.fieldPatterns.get(this.currentField!) || [];
+      let cleanText = fullText.toLowerCase();
+      let foundPatternIndex = -1;
+      let startIndex = 0;
+
+      // Find the LATEST occurrence of the field pattern to determine where the value starts.
       patterns.forEach(pattern => {
-        cleanText = cleanText.replace(new RegExp(`\\b${pattern}\\b`, 'gi'), '');
+        const index = cleanText.lastIndexOf(pattern);
+        if (index > startIndex) {
+            startIndex = index + pattern.length;
+            foundPatternIndex = index;
+        }
       });
-
-      cleanText = cleanText.trim();
       
-      if (!cleanText) return null;
-
-      // Extract value based on field type
-      let value = this.cleanExtractedValue(cleanText);
+      if (foundPatternIndex === -1) {
+          // Field mention not found in the latest transcript segment. Wait for more speech.
+          return null; 
+      }
       
-      // Validate value
-      if (value && this.isValidValue(value, this.currentField!)) {
-        this.currentField = null; // Reset field context after value extraction
-        return value;
+      // Extract everything AFTER the field mention
+      let valueSegment = cleanText.substring(startIndex);
+      
+      // Remove common separators/keywords like 'is', 'a', ':' from the start of the value
+      valueSegment = valueSegment.replace(/^(\s*[:\-\s]+|is\s+|a\s+|that\s+)/, '').trim();
+
+      // Check if the rest of the text qualifies as a value (less than 5-8 words)
+      const words = valueSegment.split(/\s+/).filter(w => w.length > 0);
+      if (words.length > 0 && words.length <= 8) { // 🚨 Less strict limit (8 words)
+          let finalValue = this.cleanExtractedValue(valueSegment);
+          
+          // Validate and finalize
+          if (finalValue && this.isValidValue(finalValue, field)) {
+            this.currentField = null; // Reset field context
+            return finalValue;
+          }
       }
 
       return null;
     }
+    
+    // ... (isValidValue method remains the same, it is crucial for validation)
 
     private getFieldKeywords(field: string): string[] {
       const keywordMap: { [key: string]: string[] } = {
@@ -312,21 +347,26 @@ const RecordingInterface: React.FC<RecordingInterfaceProps> = ({
       .replace(/\{DATE\}/g, new Date().toLocaleDateString());
   };
 
-  // NEW: Real-time AI Field Detection
+// NEW: Real-time AI Field Detection
   const processTranscriptWithAI = (currentTranscript: string) => {
     if (!selectedTemplate || !isRecording) return;
-
+    
+    // 🚨 FIX 3: Call detectField with the full transcript.
+    // The FieldDetectionAI is now designed to find patterns and values in the *entire* text 
+    // to handle the delay in speech recognition chunks.
     const detectionResult = fieldAI.current.detectField(currentTranscript);
     
     if (detectionResult.field && detectionResult.value) {
-      // Add to detection history
-      setFieldDetectionHistory(prev => [...prev, {
-        field: detectionResult.field!,
-        value: detectionResult.value
-      }]);
+      const isNewDetection = fieldDetectionHistory.slice(-1)[0]?.value !== detectionResult.value;
+      
+      if (isNewDetection) {
+        setFieldDetectionHistory(prev => [...prev, {
+          field: detectionResult.field!,
+          value: detectionResult.value
+        }]);
 
-      // Update template with detected value
-      updateTemplateWithFieldValue(detectionResult.field, detectionResult.value);
+        updateTemplateWithFieldValue(detectionResult.field, detectionResult.value);
+      }
     }
   };
 

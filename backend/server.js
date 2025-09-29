@@ -21,7 +21,6 @@ import {
 dotenv.config();
 const AZURE_STORAGE_CONNECTION_STRING = process.env.AZURE_STORAGE_CONNECTION_STRING;
 const AZURE_CONTAINER_NAME = process.env.AZURE_STORAGE_CONTAINER_NAME || 'files';
-
 let blobServiceClient;
 let containerClient;
 async function initializeAzureStorage() {
@@ -98,6 +97,12 @@ const syncAuth0User = async (req, res, next) => {
       const auth0User = req.auth.payload;
       const pool = await getPool();
       
+      // Check if pool is available
+      if (!pool || !pool.request) {
+        console.log('⚠️ Database unavailable - skipping Auth0 sync');
+        return next();
+      }
+
       console.log('Syncing Auth0 user:', auth0User.sub, auth0User.email);
 
       // Check if user exists by auth0_id
@@ -124,12 +129,11 @@ const syncAuth0User = async (req, res, next) => {
       }
     } catch (error) {
       console.error('Auth0 user sync error:', error);
+      // Don't break the request flow on sync errors
     }
   }
   next();
 };
-// Update your Users table creation to include auth0_id
-
 // Auth0 user creation/update middleware
 const handleAuth0User = async (req, res, next) => {
   if (req.auth && req.auth.payload) {
@@ -184,35 +188,53 @@ const authenticateJWTWithQuery = async (req, res, next) => {
   }
 };
 
+// Simple and reliable Azure SQL connection
 const dbConfig = {
-  user: 'sa',
-  password: 'Zarish2534#',
-  server: 'localhost',
-  database: 'PurrscribeAI',
+  server: process.env.AZURE_SQL_SERVER,
+  database: process.env.AZURE_SQL_DATABASE,
+  user: process.env.AZURE_SQL_USER,
+  password: process.env.AZURE_SQL_PASSWORD,
   options: {
-    encrypt: false,
+    encrypt: true,
     trustServerCertificate: true,
-    enableArithAbort: true
-  },
-  pool: {
-    max: 10,
-    min: 0,
-    idleTimeoutMillis: 30000
+    enableArithAbort: true,
+    connectTimeout: 60000,
+    requestTimeout: 60000
   }
 };
 
 let pool;
-async function getPool() {
-  if (pool) return pool;
+let isDbConnected = false;
+
+export async function getPool() {
+  if (pool && isDbConnected) return pool;
+  
   try {
+    console.log(`🔗 Connecting to Azure SQL: ${dbConfig.server}`);
+    
     pool = await sql.connect(dbConfig);
-    console.log('✅ Connected to SQL Server');
+    isDbConnected = true;
+    
+    console.log("✅ Connected to Azure SQL Database");
+    
+    // Test the connection
+    try {
+      await pool.request().query('SELECT 1 as test');
+      console.log("✅ Database connection verified");
+    } catch (testError) {
+      console.log("⚠️  Connection established but test query failed");
+    }
+    
     return pool;
   } catch (err) {
-    console.error('Database connection failed:', err);
-    throw err;
+    console.error("❌ Database connection failed:", err.message);
+    
+    // Don't throw error, return null so server can continue
+    console.log("⚠️  Running in limited mode (no database access)");
+    return null;
   }
 }
+
 const authenticateJWT = async (req, res, next) => {
   const authHeader = req.headers.authorization;
   
@@ -975,7 +997,7 @@ app.listen(port, '0.0.0.0', () => {
 });
 app.post('/api/pets', authenticateJWT, async (req, res) => {
   try {
-    const { name, species, breed, age, owner, imageData, imageType, notes } = req.body;
+    const { name, species, breed, age, owner, phoneNumber, imageData, imageType, notes } = req.body;
     const userId = req.user.id;
 
     const pool = await getPool();
@@ -987,23 +1009,19 @@ app.post('/api/pets', authenticateJWT, async (req, res) => {
       .input('breed', sql.NVarChar, breed || null)
       .input('age', sql.NVarChar, age || null)
       .input('owner', sql.NVarChar, owner)
+      .input('phoneNumber', sql.NVarChar, phoneNumber || null) // Add this
       .input('imageData', sql.NVarChar, imageData || null)
       .input('imageType', sql.NVarChar, imageType || null)
       .input('notes', sql.NVarChar, notes || null)
       .query(`
-        INSERT INTO Pets (user_id, name, species, breed, age, owner, image_data, image_type, notes)
-        OUTPUT inserted.*
-        VALUES (@userId, @name, @species, @breed, @age, @owner, @imageData, @imageType, @notes)
+        INSERT INTO Pets (user_id, name, species, breed, age, owner, phone_number, image_data, image_type, notes)
+        OUTPUT inserted.id, inserted.name, inserted.species, inserted.breed, inserted.age, 
+               inserted.owner, inserted.phone_number as phoneNumber, inserted.image_url as imageUrl, inserted.notes, inserted.created_at
+        VALUES (@userId, @name, @species, @breed, @age, @owner, @phoneNumber, @imageData, @imageType, @notes)
       `);
     
     const pet = result.recordset[0];
-     if (pet.image_data) {
-      pet.imageUrl = `data:${pet.image_type};base64,${pet.image_data}`;
-    } else {
-      pet.imageUrl = null;
-    }
-    delete pet.image_data;
-    delete pet.image_type;
+    
     res.status(201).json({
       message: "Pet added successfully",
       pet: pet
@@ -1017,6 +1035,8 @@ app.post('/api/pets', authenticateJWT, async (req, res) => {
     });
   }
 });
+// Fix the GET /api/pets endpoint
+// Fix the GET /api/pets endpoint
 app.get('/api/pets', authenticateJWT, async (req, res) => {
   try {
     const userId = req.user.id;
@@ -1032,7 +1052,10 @@ app.get('/api/pets', authenticateJWT, async (req, res) => {
           breed,
           age,
           owner,
+          phone_number as phoneNumber,
           image_url as imageUrl,
+          image_data as imageData,
+          image_type as imageType,
           notes,
           created_at
         FROM Pets 
@@ -1043,13 +1066,27 @@ app.get('/api/pets', authenticateJWT, async (req, res) => {
     res.json(result.recordset);
   } catch (err) {
     console.error("Error fetching pets:", err);
-    res.status(500).json({ error: "Failed to fetch pets" });
+    res.status(500).json({ 
+      error: "Failed to fetch pets",
+      details: err.message 
+    });
   }
 });
 app.put('/api/pets/:id', authenticateJWT, async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, species, breed, age, owner, imageData, imageType, notes } = req.body;
+    const { 
+      name, 
+      species, 
+      breed, 
+      age, 
+      owner, 
+      phoneNumber,  // Frontend sends this
+      imageData, 
+      imageType, 
+      notes 
+    } = req.body;
+    
     const userId = req.user.id;
 
     const pool = await getPool();
@@ -1092,6 +1129,12 @@ app.put('/api/pets/:id', authenticateJWT, async (req, res) => {
       request.input('owner', sql.NVarChar, owner);
     }
     
+    // Handle phone number - fix the parameter name
+    if (phoneNumber !== undefined) {
+      updateFields.push("phone_number = @phoneNumber");
+      request.input('phoneNumber', sql.NVarChar, phoneNumber || null);
+    }
+    
     if (imageData !== undefined) {
       updateFields.push("image_data = @imageData");
       request.input('imageData', sql.NVarChar, imageData || null);
@@ -1118,6 +1161,8 @@ app.put('/api/pets/:id', authenticateJWT, async (req, res) => {
       SET ${updateFields.join(", ")}
       WHERE id = @id AND user_id = @userId
     `);
+
+    // Return the updated pet with phoneNumber field
     const updatedResult = await pool.request()
       .input('id', sql.Int, id)
       .input('userId', sql.Int, userId)
@@ -1129,8 +1174,8 @@ app.put('/api/pets/:id', authenticateJWT, async (req, res) => {
           breed,
           age,
           owner,
-          image_data,
-          image_type,
+          phone_number as phoneNumber,
+          image_url as imageUrl,
           notes,
           created_at
         FROM Pets 
@@ -1142,12 +1187,6 @@ app.put('/api/pets/:id', authenticateJWT, async (req, res) => {
     }
     
     const updatedPet = updatedResult.recordset[0];
-    if (updatedPet.image_data) {
-      updatedPet.imageUrl = `data:${updatedPet.image_type};base64,${updatedPet.image_data}`;
-    } else {
-      updatedPet.imageUrl = null;
-    }
-    delete updatedPet.image_data;
     
     res.json({
       message: "Pet updated successfully",
@@ -1162,7 +1201,6 @@ app.put('/api/pets/:id', authenticateJWT, async (req, res) => {
     });
   }
 });
-
 app.delete('/api/pets/:id', authenticateJWT, async (req, res) => {
   try {
     const { id } = req.params;
@@ -3312,3 +3350,4 @@ app.post('/api/auth/link-auth0', authenticateJWT, async (req, res) => {
     res.status(500).json({ error: 'Failed to link Auth0 account' });
   }
 });
+

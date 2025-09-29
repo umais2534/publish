@@ -7,9 +7,9 @@ import AddPetDialog from "./AddPetDialog";
 import ViewPetDialog from "./ViewPetDialog";
 import EditPetDialog from "./EditPetDialog";
 import DeletePetDialog from "./DeletePetDialog";
-
 import { useAuth } from "@/context/AuthContext";
 import { Pet, PetFormData as BasePetFormData } from "./types/petTypes";
+
 const PetManagement = () => {
   const [pets, setPets] = useState<Pet[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -23,10 +23,12 @@ const PetManagement = () => {
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
 
   const [selectedPet, setSelectedPet] = useState<Pet | null>(null);
+  
   interface PetFormData extends BasePetFormData {
-  imageData?: string;
-  imageType?: string;
-}
+    imageData?: string;
+    imageType?: string;
+    phoneNumber?: string;
+  }
 
   const [newPet, setNewPet] = useState<PetFormData>({
     name: "",
@@ -34,6 +36,7 @@ const PetManagement = () => {
     breed: "",
     age: "",
     owner: "",
+    phoneNumber: "",
     imageUrl: "",
     imageData: "",
     imageType: "",
@@ -46,35 +49,44 @@ const PetManagement = () => {
     breed: "",
     age: "",
     owner: "",
+    phoneNumber: "",
     imageUrl: "",
     notes: ""
   });
 
   // Fetch pets from API
   useEffect(() => {
-    const fetchPets = async () => {
-      try {
-        setIsLoading(true);
-        const token = getToken();
-        const response = await fetch("/api/pets", {
-          headers: {
-            "Authorization": `Bearer ${token}`,
-          },
-        });
-        
-        if (response.ok) {
-          const petsData = await response.json();
-          setPets(petsData);
-        } else {
-          console.error("Failed to fetch pets");
-        }
-      } catch (error) {
-        console.error("Error fetching pets:", error);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
+// Fix the fetchPets function in useEffect
+const fetchPets = async () => {
+  try {
+    setIsLoading(true);
+    const token = getToken();
+    const response = await fetch("/api/pets", {
+      headers: {
+        "Authorization": `Bearer ${token}`,
+      },
+    });
+    
+    if (response.ok) {
+      const petsData = await response.json();
+      console.log("Fetched pets data:", petsData); // Debug log
+      
+      // Ensure phoneNumber field is properly mapped
+      const petsWithPhone = petsData.map((pet: any) => ({
+        ...pet,
+        phoneNumber: pet.phoneNumber || '' // Use the phoneNumber from API response
+      }));
+      
+      setPets(petsWithPhone);
+    } else {
+      console.error("Failed to fetch pets");
+    }
+  } catch (error) {
+    console.error("Error fetching pets:", error);
+  } finally {
+    setIsLoading(false);
+  }
+};
     fetchPets();
   }, []);
 
@@ -90,90 +102,85 @@ const PetManagement = () => {
     return matchesSearch && matchesSpecies;
   });
 
-const handleAddPet = async () => {
-  if (newPet.name && newPet.species && newPet.breed && newPet.owner) {
-    try {
-      const token = getToken();
-      
-      if (!token) {
-        alert("Please login first");
-        logout();
-        return;
-      }
-
-      // Prepare the data to send
-      const petData: any = {
-        name: newPet.name,
-        species: newPet.species,
-        breed: newPet.breed,
-        age: newPet.age,
-        owner: newPet.owner,
-        notes: newPet.notes
-      };
-
-      // Handle image data - use either URL or base64, not both
-      if (newPet.imageData && newPet.imageType) {
-        petData.imageData = newPet.imageData;
-        petData.imageType = newPet.imageType;
-      } else if (newPet.imageUrl) {
-        petData.imageUrl = newPet.imageUrl;
-      }
-
-      console.log("Sending pet data:", { 
-        ...petData, 
-        imageData: petData.imageData ? "BASE64_DATA" : null,
-        imageUrl: petData.imageUrl 
-      });
-
-      const response = await fetch("/api/pets", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${token}`,
-        },
-        body: JSON.stringify(petData),
-      });
-      
-      // Clone the response to read it multiple times if needed
-      const responseClone = response.clone();
-      
-      // First check if response is OK
-      if (response.ok) {
-        const addedPet = await response.json();
-        setPets([...pets, addedPet.pet]);
-        setNewPet({
-          name: "",
-          species: "",
-          breed: "",
-          age: "",
-          owner: "",
-          imageUrl: "",
-          imageData: "",
-          imageType: "",
-          notes: ""
-        });
-        setIsAddPetDialogOpen(false);
-      } else {
-        // If not OK, try to read error message
-        try {
-          const errorData = await responseClone.json();
-          console.error("Server error response:", errorData);
-          alert("Failed to add pet: " + (errorData.error || "Unknown error"));
-        } catch (jsonError) {
-          // If JSON parsing fails, read as text
-          const text = await responseClone.text();
-          console.error("Server error response (text):", text);
-          alert("Failed to add pet: " + text.substring(0, 100));
+  const handleAddPet = async () => {
+    if (newPet.name && newPet.species && newPet.breed && newPet.owner && newPet.phoneNumber) {
+      try {
+        const token = getToken();
+        
+        if (!token) {
+          alert("Please login first");
+          logout();
+          return;
         }
+
+        // Prepare the data to send
+        const petData: any = {
+          name: newPet.name,
+          species: newPet.species,
+          breed: newPet.breed,
+          age: newPet.age,
+          owner: newPet.owner,
+          phoneNumber: newPet.phoneNumber,
+          notes: newPet.notes
+        };
+
+        // Handle image data
+        if (newPet.imageData && newPet.imageType) {
+          petData.imageData = newPet.imageData;
+          petData.imageType = newPet.imageType;
+        } else if (newPet.imageUrl) {
+          petData.imageUrl = newPet.imageUrl;
+        }
+
+        console.log("Sending pet data:", petData);
+
+        const response = await fetch("/api/pets", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${token}`,
+          },
+          body: JSON.stringify(petData),
+        });
+        
+        const responseClone = response.clone();
+        
+        if (response.ok) {
+          const addedPet = await response.json();
+          setPets([...pets, addedPet.pet]);
+          setNewPet({
+            name: "",
+            species: "",
+            breed: "",
+            age: "",
+            owner: "",
+            phoneNumber: "",
+            imageUrl: "",
+            imageData: "",
+            imageType: "",
+            notes: ""
+          });
+          setIsAddPetDialogOpen(false);
+        } else {
+          try {
+            const errorData = await responseClone.json();
+            console.error("Server error response:", errorData);
+            alert("Failed to add pet: " + (errorData.error || "Unknown error"));
+          } catch (jsonError) {
+            const text = await responseClone.text();
+            console.error("Server error response (text):", text);
+            alert("Failed to add pet: " + text.substring(0, 100));
+          }
+        }
+      } catch (error) {
+        console.error("Error adding pet:", error);
+        alert("Error adding pet: " + (error as Error).message);
       }
-    } catch (error) {
-      console.error("Error adding pet:", error);
-      alert("Error adding pet: " + (error as Error).message);
+    } else {
+      alert("Please fill all required fields (*)");
     }
-  } else {
-    alert("Please fill all required fields (*)");
-  }
-};
+  };
+
   const handleViewPet = (pet: Pet) => {
     setSelectedPet(pet);
     setIsViewPetDialogOpen(true);
@@ -205,47 +212,54 @@ const handleAddPet = async () => {
 
   const handleEditPet = (pet: Pet) => {
     setSelectedPet(pet);
+    // editFormData کو pet کے ڈیٹا سے fill کریں
     setEditFormData({
       name: pet.name,
       species: pet.species,
       breed: pet.breed,
       age: pet.age || "",
       owner: pet.owner,
+      phoneNumber: pet.phoneNumber || "", // یہاں phoneNumber شامل کریں
       imageUrl: pet.imageUrl || "",
       notes: pet.notes || ""
     });
     setIsEditPetDialogOpen(true);
   };
 
+// EditPetDialog.tsx میں saveEditedPet فنکشن کو اپ ڈیٹ کریں
 const saveEditedPet = async () => {
   if (
     selectedPet &&
     editFormData.name &&
     editFormData.species &&
     editFormData.breed &&
-    editFormData.owner
+    editFormData.owner &&
+    editFormData.phoneNumber
   ) {
     try {
       setIsSaving(true);
       const token = getToken();
       
-      // Prepare the data to send
+      // Prepare the data to send - use consistent field names
       const petData: any = {
         name: editFormData.name,
         species: editFormData.species,
         breed: editFormData.breed,
         age: editFormData.age,
         owner: editFormData.owner,
+        phoneNumber: editFormData.phoneNumber.replace(/\D/g, ''), // Clean phone number
         notes: editFormData.notes
       };
 
-      // Handle image data - use either URL or base64, not both
+      // Handle image data
       if (editFormData.imageData && editFormData.imageType) {
         petData.imageData = editFormData.imageData;
         petData.imageType = editFormData.imageType;
       } else if (editFormData.imageUrl) {
         petData.imageUrl = editFormData.imageUrl;
       }
+
+      console.log("Updating pet with data:", petData);
 
       const response = await fetch(`/api/pets/${selectedPet.id}`, {
         method: "PUT",
@@ -273,11 +287,16 @@ const saveEditedPet = async () => {
           breed: "",
           age: "",
           owner: "",
+          phoneNumber: "",
           imageUrl: "",
           notes: ""
         });
+        
+        alert("Pet updated successfully!");
       } else {
         console.error("Failed to update pet");
+        const errorText = await response.text();
+        console.error("Error response:", errorText);
         alert("Failed to update pet. Please try again.");
       }
     } catch (error) {
@@ -294,7 +313,6 @@ const saveEditedPet = async () => {
     setNewPet((prev) => ({ 
       ...prev, 
       ...updatedFields,
-      // Ensure we don't lose imageData/imageType when other fields change
       imageData: updatedFields.imageData !== undefined ? updatedFields.imageData : prev.imageData,
       imageType: updatedFields.imageType !== undefined ? updatedFields.imageType : prev.imageType
     }));
@@ -302,6 +320,18 @@ const saveEditedPet = async () => {
 
   const handleEditFormChange = (updatedFields: Partial<PetFormData>) => {
     setEditFormData((prev) => ({ ...prev, ...updatedFields }));
+  };
+
+  // WhatsApp کال کا ہینڈلر
+  const handleCallOwner = (pet: Pet) => {
+    if (!pet.phoneNumber) {
+      alert(`Phone number not available for ${pet.name}'s owner`);
+      return;
+    }
+
+    const formattedNumber = pet.phoneNumber.replace(/\D/g, '');
+    const whatsappUrl = `https://wa.me/${formattedNumber}`;
+    window.open(whatsappUrl, '_blank', 'noopener,noreferrer');
   };
 
   if (isLoading) {
@@ -327,7 +357,7 @@ const saveEditedPet = async () => {
           setSelectedPet(pets.find((p) => p.id === id) || null);
           setIsDeleteDialogOpen(true);
         }}
-        onCallOwner={handleViewPet}
+        onCallOwner={handleCallOwner}
       />
 
       <AddPetDialog
